@@ -1,6 +1,7 @@
 """Canvas Copilot — text-to-image generation with OpenAI's GPT Image model."""
 
 import base64
+import io
 import os
 
 import streamlit as st
@@ -42,6 +43,24 @@ prompt = st.text_area(
     height=120,
 )
 
+# Optional reference images. With references attached, the app switches from
+# the generations endpoint to the edits endpoint (client.images.edit).
+reference_files = st.file_uploader(
+    "Reference images (optional)",
+    type=["png", "jpg", "jpeg", "webp"],
+    accept_multiple_files=True,
+    help=(
+        "Attach up to 16 reference images (PNG, JPEG, or WEBP, <50MB each). "
+        "The model will use them as style, subject, or composition references."
+    ),
+)
+
+if reference_files:
+    ref_cols = st.columns(len(reference_files))
+    for col, file in zip(ref_cols, reference_files):
+        with col:
+            st.image(file, caption=file.name, width="stretch")
+
 size_col, quality_col = st.columns(2)
 with size_col:
     size = st.selectbox("Size", list(SIZE_OPTIONS), format_func=SIZE_OPTIONS.get)
@@ -57,12 +76,27 @@ if generate:
     else:
         try:
             with st.spinner("Painting your image…"):
-                result = client.images.generate(
-                    model=MODEL,
-                    prompt=cleaned_prompt,
-                    size=size,
-                    quality=quality,
-                )
+                if reference_files:
+                    # The edits endpoint expects file-like objects, not raw bytes.
+                    input_images = []
+                    for file in reference_files:
+                        buffer = io.BytesIO(file.getvalue())
+                        buffer.name = file.name
+                        input_images.append(buffer)
+                    result = client.images.edit(
+                        model=MODEL,
+                        image=input_images,
+                        prompt=cleaned_prompt,
+                        size=size,
+                        quality=quality,
+                    )
+                else:
+                    result = client.images.generate(
+                        model=MODEL,
+                        prompt=cleaned_prompt,
+                        size=size,
+                        quality=quality,
+                    )
                 image_bytes = base64.b64decode(result.data[0].b64_json)
             # Keep the result so it survives reruns (e.g. download-button clicks).
             st.session_state["last_image"] = image_bytes
