@@ -6,7 +6,7 @@ import os
 
 import streamlit as st
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 
 # Load the environment variables and initialize the OpenAI client
 # (same pattern as reference/generate_image.py).
@@ -28,6 +28,10 @@ QUALITY_OPTIONS = {
     "high": "High",
     "xhigh": "X-High",
     "max": "Max",
+}
+MODERATION_OPTIONS = {
+    "auto": "Auto (standard filtering)",
+    "low": "Low (less restrictive)",
 }
 
 st.set_page_config(page_title="Canvas Copilot", page_icon="🎨", layout="centered")
@@ -61,11 +65,22 @@ if reference_files:
         with col:
             st.image(file, caption=file.name, width="stretch")
 
-size_col, quality_col = st.columns(2)
+size_col, quality_col, moderation_col = st.columns(3)
 with size_col:
     size = st.selectbox("Size", list(SIZE_OPTIONS), format_func=SIZE_OPTIONS.get)
 with quality_col:
     quality = st.selectbox("Quality", list(QUALITY_OPTIONS), format_func=QUALITY_OPTIONS.get)
+with moderation_col:
+    moderation = st.selectbox(
+        "Moderation",
+        list(MODERATION_OPTIONS),
+        format_func=MODERATION_OPTIONS.get,
+        help=(
+            "Controls content-moderation strictness. auto: standard filtering "
+            "that limits potentially age-inappropriate content. low: less "
+            "restrictive filtering."
+        ),
+    )
 
 generate = st.button("Generate", type="primary", width="stretch")
 
@@ -89,6 +104,9 @@ if generate:
                         prompt=cleaned_prompt,
                         size=size,
                         quality=quality,
+                        # SDK 3.13 has no typed `moderation` param on edit();
+                        # the /images/edits endpoint still accepts it in the body.
+                        extra_body={"moderation": moderation},
                     )
                 else:
                     result = client.images.generate(
@@ -96,11 +114,34 @@ if generate:
                         prompt=cleaned_prompt,
                         size=size,
                         quality=quality,
+                        moderation=moderation,
                     )
                 image_bytes = base64.b64decode(result.data[0].b64_json)
             # Keep the result so it survives reruns (e.g. download-button clicks).
             st.session_state["last_image"] = image_bytes
             st.session_state["last_prompt"] = cleaned_prompt
+        except BadRequestError as error:
+            if error.code == "moderation_blocked":
+                # Per the OpenAI docs: keep the primary message generic and use
+                # moderation_details (stage + categories) for remediation hints.
+                error_body = error.body if isinstance(error.body, dict) else {}
+                details = error_body.get("moderation_details") or {}
+                categories = details.get("categories") or []
+                stage = details.get("moderation_stage")
+
+                hint = "Try changing the prompt and generating again."
+                if "harassment" in categories:
+                    hint = "Try removing abusive or targeting language and focus on neutral visual details instead."
+                elif stage == "input":
+                    hint = "Try revising the prompt or reference images and submit the request again."
+                elif stage == "output":
+                    hint = "The generated result was blocked by a safety check. Try changing the prompt and generating again."
+
+                st.error(f"Your request was blocked by content moderation. {hint}")
+                with st.expander("Show moderation details"):
+                    st.json({"moderation_stage": stage, "categories": categories})
+            else:
+                st.error(f"Image generation failed: {error}")
         except Exception as exc:
             st.error(f"Image generation failed: {exc}")
 
