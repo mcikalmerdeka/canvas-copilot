@@ -22,6 +22,8 @@ SIZE_OPTIONS = {
     "1024x1024": "1024 × 1024 · Square",
     "1024x1536": "1024 × 1536 · Portrait",
     "1536x1024": "1536 × 1024 · Landscape",
+    "2048x1152": "2048 × 1152 · Widescreen (16:9)",
+    "1152x2048": "1152 × 2048 · Phone (9:16)",
 }
 QUALITY_OPTIONS = {
     "auto": "Auto",
