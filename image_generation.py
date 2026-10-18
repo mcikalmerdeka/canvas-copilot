@@ -44,6 +44,23 @@ FORMAT_MIME = {
 }
 
 
+def to_named_buffer(data: bytes, name: str) -> io.BytesIO:
+    """Wrap image bytes as a named buffer, as the edits endpoint expects."""
+    buffer = io.BytesIO(data)
+    buffer.name = name
+    return buffer
+
+
+def collect_input_images(reference_files, handoff_image: dict | None) -> list[io.BytesIO]:
+    """Merge the handoff image (from Prompt Generation) and uploaded references into edit inputs."""
+    input_images = []
+    if handoff_image:
+        input_images.append(to_named_buffer(handoff_image["bytes"], handoff_image["name"]))
+    for file in reference_files or []:
+        input_images.append(to_named_buffer(file.getvalue(), file.name))
+    return input_images
+
+
 def render(client) -> None:
     st.title("🎨 Canvas Copilot")
     st.caption("Describe anything — GPT Image paints it.")
@@ -57,7 +74,7 @@ def render(client) -> None:
         height=120,
     )
 
-    # Optional reference images. With references attached, the app switches from
+    # Optional reference images. With inputs attached, the app switches from
     # the generations endpoint to the edits endpoint (client.images.edit).
     reference_files = st.file_uploader(
         "Reference images (optional)",
@@ -74,6 +91,22 @@ def render(client) -> None:
         for col, file in zip(ref_cols, reference_files):
             with col:
                 st.image(file, caption=file.name, width="stretch")
+
+    # Image handed off from Prompt Generation ("💡 Use in Image Generation").
+    # Streamlit's uploader can't be pre-filled, so the image travels via session
+    # state and stays attached until removed or replaced by another handoff.
+    if st.session_state.get("pending_handoff_image"):
+        st.session_state["handoff_image"] = st.session_state.pop("pending_handoff_image")
+    handoff_image = st.session_state.get("handoff_image")
+    if handoff_image:
+        st.image(
+            handoff_image["bytes"],
+            caption=f"{handoff_image['name']} · attached from Prompt Generation",
+            width="stretch",
+        )
+        if st.button("✕ Remove attached image"):
+            st.session_state.pop("handoff_image", None)
+            st.rerun()
 
     model_col, size_col, quality_col, moderation_col = st.columns(4)
     with model_col:
@@ -146,13 +179,9 @@ def render(client) -> None:
                     else {}
                 )
                 with st.spinner("Painting your image…"):
-                    if reference_files:
-                        # The edits endpoint expects file-like objects, not raw bytes.
-                        input_images = []
-                        for file in reference_files:
-                            buffer = io.BytesIO(file.getvalue())
-                            buffer.name = file.name
-                            input_images.append(buffer)
+                    # The edits endpoint expects file-like objects, not raw bytes.
+                    input_images = collect_input_images(reference_files, handoff_image)
+                    if input_images:
                         result = client.images.edit(
                             model=model,
                             image=input_images,

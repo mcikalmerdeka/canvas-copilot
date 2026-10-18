@@ -3,7 +3,7 @@
 A Streamlit app with two modes, selectable from the left sidebar:
 
 - **Image Generation** — turn prompts into images with OpenAI's GPT Image models, with reference images, aspect ratios, and quality controls.
-- **Prompt Generation** — upgrade rough prompt ideas into richly structured prompts, or reverse-engineer a prompt from an uploaded photo, using OpenAI's `gpt-6-luna` reasoning model.
+- **Prompt Generation** — upgrade rough prompt ideas into richly structured prompts, reverse-engineer a prompt from an uploaded photo, or turn an edit request into a structured image-editing prompt, using OpenAI's `gpt-6-luna` reasoning model.
 
 ## Features
 
@@ -19,10 +19,11 @@ A Streamlit app with two modes, selectable from the left sidebar:
 
 Powered by `gpt-6-luna` with **medium reasoning effort**, called through the OpenAI **Responses API** (text and image input, ~1M context window). The selected format's exemplar file is injected directly into the model context as the template to emulate.
 
-Two capabilities, selectable in the sidebar:
+Three capabilities, selectable in the sidebar:
 
 1. **Upgrade Prompt** — paste a rough prompt; the model expands it into the selected format.
 2. **Image-to-Prompt** — upload one image (PNG/JPEG/WEBP); the model studies it and writes the prompt that would recreate a photo like it. An optional "extra direction" field steers attention (e.g. *focus on the lighting*).
+3. **Image-Edit Prompt** — upload the image you want to edit plus a rough edit request (*"remove the text and QR code, keep everything else identical"*, *"extend downward, keep the new city to the bottom 15%"*); the model turns it into a richly structured **image-editing prompt** (task framing, element-by-element changes, restoration/construction guidance, strict preservation requirements, negative constraints, output spec). This capability uses its own dedicated exemplars in `prompts/edit_prompt.md` instead of the three generation formats, and the model studies the uploaded image so the prompt references its real content (named subjects, palette, composition).
 
 Three target prompt formats (one at a time), each backed by a real exemplar in `prompts/`:
 
@@ -32,7 +33,7 @@ Three target prompt formats (one at a time), each backed by a real exemplar in `
 | Format 2 | Labeled sections (`Direction:`, `Mood:`, `Camera:`, …) | `prompts/format_2.md` |
 | Format 3 | Structured JSON object | `prompts/format_3.json` |
 
-Results render in **Rendered / Raw (copy-ready)** tabs — format 3 renders as a JSON tree, with a fallback to raw output if the model ever returns invalid JSON — plus a download button (`.md` or `.json` per format) and a **💡 Use in Image Generation** button that switches modes and pre-fills the Image Generation prompt box. Inputs and the last result survive Streamlit reruns.
+Results render in **Rendered / Raw (copy-ready)** tabs — format 3 renders as a JSON tree, with a fallback to raw output if the model ever returns invalid JSON — plus a download button (`.md` or `.json` per format; edit prompts download as `prompt_edit.md`) and a **💡 Use in Image Generation** button that switches modes and pre-fills the Image Generation prompt box. For the two image capabilities, the uploaded image is carried along too: Image Generation shows it as an attached input (removable with one click) and routes the request through the edits endpoint, so the edit loop is upload → describe → generate without re-attaching. Inputs and the last result survive Streamlit reruns.
 
 ## Getting started
 
@@ -61,7 +62,7 @@ Requirements: **Python 3.14+** and [uv](https://docs.astral.sh/uv/).
 The test suite covers the format registry, LLM message building, output handling (code-fence stripping, JSON parsing), and bare-mode rendering of both modes:
 
 ```pwsh
-uv run pytest                # full suite (29 offline tests)
+uv run pytest                # full suite (46 offline tests)
 uv run pytest -m integration # live test: one real gpt-6-luna call (needs OPENAI_API_KEY)
 uv run pytest -m "not integration"  # offline only (default behavior: live test auto-skips without a key)
 ```
@@ -72,7 +73,7 @@ uv run pytest -m "not integration"  # offline only (default behavior: live test 
 app.py                  Entry point: sidebar mode selector + OpenAI client + dispatch
 image_generation.py     Image Generation mode (GPT Image models)
 prompt_generation.py    Prompt Generation mode (gpt-6-luna via the Responses API)
-prompt_formats.py       Registry of the three prompt formats / exemplar loading
+prompt_formats.py       Registry of the three prompt formats + the edit exemplar loader
 prompts/                Exemplar files used as the injected prompt templates
 tests/                  Pytest suite (includes one live-API integration test)
 PROMPTS.md              Prompt engineering notes + library for the image models

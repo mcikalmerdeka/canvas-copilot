@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 
 from prompt_formats import (
+    EDIT_EXEMPLAR,
+    EDIT_EXEMPLAR_PATH,
     PROMPT_FORMATS,
     get_format,
     list_labels,
@@ -48,6 +50,25 @@ class TestRegistryContents:
         parsed = json.loads(exemplar)
         assert isinstance(parsed, dict)
         assert "task" in parsed  # top-level key visible in the source file
+
+
+class TestEditExemplar:
+    """The Image-Edit Prompt capability ships its own exemplar outside the registry."""
+
+    def test_edit_exemplar_path_points_to_real_file(self, project_root: Path) -> None:
+        path = project_root / EDIT_EXEMPLAR_PATH
+        assert path.is_file(), f"missing edit exemplar file: {EDIT_EXEMPLAR_PATH}"
+
+    def test_edit_exemplar_text_is_loaded_and_non_empty(self) -> None:
+        assert isinstance(EDIT_EXEMPLAR, str)
+        assert EDIT_EXEMPLAR.strip(), "edit exemplar must not be empty"
+
+    def test_edit_exemplar_matches_file_content(self, project_root: Path) -> None:
+        path = project_root / EDIT_EXEMPLAR_PATH
+        assert path.read_text(encoding="utf-8") == EDIT_EXEMPLAR
+
+    def test_edit_exemplar_is_not_part_of_the_three_format_registry(self) -> None:
+        assert tuple(PROMPT_FORMATS) == EXPECTED_FORMATS
 
 
 class TestAccessors:
