@@ -8,12 +8,18 @@ prompt in exactly that format.
 
 from __future__ import annotations
 
-import base64
 import json
 
 import streamlit as st
 
-from prompt_formats import EDIT_EXEMPLAR, PROMPT_FORMATS, get_format, label_to_id
+from canvas_copilot.core import evolink_api as ev
+from canvas_copilot.modes.prompt_formats import (
+    EDIT_EXEMPLAR,
+    PROMPT_FORMATS,
+    get_format,
+    label_to_id,
+)
+from canvas_copilot.settings import providers as pr
 
 # ---------------------------------------------------------------------------
 # Model configuration
@@ -120,8 +126,18 @@ def build_edit_system_prompt() -> str:
 
 def build_image_data_url(image_bytes: bytes, image_mime: str) -> str:
     """Encode uploaded image bytes as a data URL for the Responses API."""
-    encoded = base64.b64encode(image_bytes).decode("ascii")
-    return f"data:{image_mime};base64,{encoded}"
+    return ev.to_data_url(image_bytes, image_mime)
+
+
+def resolve_image_ref(ctx: pr.ProviderContext, image_bytes: bytes, image_mime: str, file_name: str) -> str:
+    """Return the `image_url` string the Responses `input_image` block needs.
+
+    OpenAI accepts an inline base64 data URL; Evolink requires a downloadable
+    public URL, so the bytes go through its file service first.
+    """
+    if ctx.is_evolink:
+        return ev.upload_image(ctx.api_key, image_bytes, image_mime, file_name)
+    return build_image_data_url(image_bytes, image_mime)
 
 
 def build_user_content(
@@ -131,20 +147,26 @@ def build_user_content(
     image_mime: str | None = None,
     extra_direction: str | None = None,
     edit_request: str | None = None,
+    image_url: str | None = None,
 ) -> str | list[dict]:
-    """Build the user message: plain text for upgrades, text + image for image-to-prompt and image-edit."""
+    """Build the user message: plain text for upgrades, text + image for image-to-prompt and image-edit.
+
+    `image_url`, when given, is used verbatim (an already-uploaded Evolink file
+    URL or any other downloadable reference); `image_bytes` is otherwise
+    encoded as an inline base64 data URL.
+    """
     if capability == PIPELINE_IMAGE:
         text = IMAGE_USER_TEXT
         if extra_direction:
             text += f"\n\nExtra direction from the user: {extra_direction.strip()}"
         return [
             {"type": "input_text", "text": text},
-            {"type": "input_image", "image_url": build_image_data_url(image_bytes, image_mime)},
+            {"type": "input_image", "image_url": image_url or build_image_data_url(image_bytes or b"", image_mime or "image/png")},
         ]
     if capability == PIPELINE_EDIT:
         return [
             {"type": "input_text", "text": EDIT_USER_TEMPLATE.format(edit_request=(edit_request or "").strip())},
-            {"type": "input_image", "image_url": build_image_data_url(image_bytes, image_mime)},
+            {"type": "input_image", "image_url": image_url or build_image_data_url(image_bytes or b"", image_mime or "image/png")},
         ]
     return UPGRADE_USER_TEMPLATE.format(raw_prompt=raw_prompt.strip())
 
@@ -189,6 +211,7 @@ def generate_prompt(
     image_mime: str | None = None,
     extra_direction: str | None = None,
     edit_request: str | None = None,
+    image_url: str | None = None,
 ) -> str:
     """One blocking call to `gpt-6-luna`; returns the finished prompt text."""
     system_prompt = build_edit_system_prompt() if capability == PIPELINE_EDIT else build_system_prompt(format_id)
@@ -207,6 +230,7 @@ def generate_prompt(
                     image_mime=image_mime,
                     extra_direction=extra_direction,
                     edit_request=edit_request,
+                    image_url=image_url,
                 ),
             },
         ],
@@ -218,7 +242,7 @@ def generate_prompt(
 # UI
 # ---------------------------------------------------------------------------
 
-def render(client) -> None:
+def render(ctx: pr.ProviderContext) -> None:
     st.title("🧩 Prompt Generation")
     st.caption(
         "Upgrade a raw idea into a rich prompt, reverse-engineer a prompt from an image, "
@@ -295,7 +319,7 @@ def render(client) -> None:
         generate_label = "🧩 Generate Prompt"
 
     if st.button(generate_label, type="primary", width="stretch"):
-        _handle_generate(client, capability, fmt_id, raw_prompt, image_file)
+        _handle_generate(ctx, capability, fmt_id, raw_prompt, image_file)
 
     # --- Result (survives reruns) --------------------------------------------
     result = st.session_state.get("pg_result")
@@ -303,7 +327,7 @@ def render(client) -> None:
         _render_result(result, fmt)
 
 
-def _handle_generate(client, capability: str, fmt_id: str | None, raw_prompt, image_file) -> None:
+def _handle_generate(ctx: pr.ProviderContext, capability: str, fmt_id: str | None, raw_prompt, image_file) -> None:
     if capability == CAPABILITY_UPGRADE and not (raw_prompt or "").strip():
         st.warning("Please enter a raw prompt describing your idea.")
         return
@@ -320,25 +344,33 @@ def _handle_generate(client, capability: str, fmt_id: str | None, raw_prompt, im
 
     try:
         with st.spinner("Composing your prompt…"):
+            # The Responses API needs an image reference the provider can fetch:
+            # a data URL for OpenAI, an uploaded file URL for Evolink.
+            image_url = None
+            if capability in (CAPABILITY_IMAGE, CAPABILITY_EDIT) and image_file is not None:
+                image_url = resolve_image_ref(
+                    ctx,
+                    image_file.getvalue(),
+                    image_file.type or "image/png",
+                    image_file.name,
+                )
             if capability == CAPABILITY_UPGRADE:
-                generated = generate_prompt(client, PIPELINE_TEXT, fmt_id, raw_prompt=raw_prompt.strip())
+                generated = generate_prompt(ctx.client, PIPELINE_TEXT, fmt_id, raw_prompt=raw_prompt.strip())
                 source = f"Raw prompt: {raw_prompt.strip()[:80]}…"
             elif capability == CAPABILITY_EDIT:
                 generated = generate_prompt(
-                    client,
+                    ctx.client,
                     PIPELINE_EDIT,
-                    image_bytes=image_file.getvalue(),
-                    image_mime=image_file.type or "image/png",
+                    image_url=image_url,
                     edit_request=(st.session_state.get("pg_edit_request") or "").strip(),
                 )
                 source = f"Edit of image: {image_file.name}"
             else:
                 generated = generate_prompt(
-                    client,
+                    ctx.client,
                     PIPELINE_IMAGE,
                     fmt_id,
-                    image_bytes=image_file.getvalue(),
-                    image_mime=image_file.type or "image/png",
+                    image_url=image_url,
                     extra_direction=st.session_state.get("pg_extra_direction") or None,
                 )
                 source = f"Image: {image_file.name}"

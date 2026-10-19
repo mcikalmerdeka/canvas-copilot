@@ -10,8 +10,8 @@ import base64
 import json
 from types import SimpleNamespace
 
-import prompt_generation as pg
-from prompt_formats import get_format
+import canvas_copilot.modes.prompt_generation as pg
+from canvas_copilot.modes.prompt_formats import get_format
 
 
 class RecordingResponses:
@@ -54,7 +54,7 @@ class TestModelConfiguration:
 
 class TestEditSystemPrompt:
     def test_contains_edit_exemplar_verbatim(self) -> None:
-        from prompt_formats import EDIT_EXEMPLAR
+        from canvas_copilot.modes.prompt_formats import EDIT_EXEMPLAR
 
         system_prompt = pg.build_edit_system_prompt()
         assert EDIT_EXEMPLAR in system_prompt
@@ -156,7 +156,7 @@ class TestEditPipeline:
         assert client.responses.calls[0]["input"][0]["role"] == "system"
 
     def test_upgrade_capability_still_uses_format_exemplar(self) -> None:
-        from prompt_formats import get_format
+        from canvas_copilot.modes.prompt_formats import get_format
 
         client = RecordingClient()
         pg.generate_prompt(client, pg.PIPELINE_TEXT, "format_2", raw_prompt="idea")
@@ -204,3 +204,57 @@ class TestFilenames:
     def test_edit_result_meta_renders_markdown_and_names_download(self) -> None:
         assert pg.EDIT_RESULT_META["is_json"] is False
         assert pg.result_filename(pg.EDIT_RESULT_META) == "prompt_edit.md"
+
+
+# --- Provider-aware image references ----------------------------------------------
+
+import canvas_copilot.core.evolink_api as ev  # noqa: E402
+import canvas_copilot.settings.providers as pr  # noqa: E402
+
+EVOLINK_CTX = pr.ProviderContext(
+    provider_id=pr.PROVIDER_EVOLINK, api_key="ek-test", client=RecordingClient()
+)
+OPENAI_CTX = pr.ProviderContext(
+    provider_id=pr.PROVIDER_OPENAI, api_key="sk-test", client=RecordingClient()
+)
+
+
+class TestImageReferenceResolution:
+    """Evolink needs a downloadable URL for `input_image`; OpenAI takes data URLs."""
+
+    def test_openai_resolves_to_a_data_url(self) -> None:
+        resolved = pg.resolve_image_ref(OPENAI_CTX, b"\x89PNG bytes", "image/png", "source.png")
+        assert resolved == "data:image/png;base64," + base64.b64encode(b"\x89PNG bytes").decode("ascii")
+
+    def test_evolink_uploads_the_bytes_and_uses_the_file_url(self, monkeypatch) -> None:
+        uploads: list[tuple] = []
+
+        def fake_upload(api_key, image_bytes, image_mime, file_name=None):
+            uploads.append((api_key, image_bytes, image_mime, file_name))
+            return f"https://files.evolink.ai/u/{file_name}"
+
+        monkeypatch.setattr(ev, "upload_image", fake_upload)
+        resolved = pg.resolve_image_ref(EVOLINK_CTX, b"jpeg-bytes", "image/jpeg", "photo.jpg")
+        assert resolved == "https://files.evolink.ai/u/photo.jpg"
+        assert uploads[0] == ("ek-test", b"jpeg-bytes", "image/jpeg", "photo.jpg")
+
+
+class TestUserContentWithImageUrl:
+    def test_image_capability_uses_the_given_url_verbatim(self) -> None:
+        parts = pg.build_user_content(pg.PIPELINE_IMAGE, image_url="https://files.evolink.ai/u/photo.jpg")
+        assert parts[1] == {"type": "input_image", "image_url": "https://files.evolink.ai/u/photo.jpg"}
+
+    def test_edit_capability_uses_the_given_url_verbatim(self) -> None:
+        parts = pg.build_user_content(
+            pg.PIPELINE_EDIT,
+            edit_request="remove the text",
+            image_url="https://files.evolink.ai/u/source.png",
+        )
+        assert parts[1] == {"type": "input_image", "image_url": "https://files.evolink.ai/u/source.png"}
+
+    def test_generate_prompt_forwards_the_resolved_url(self) -> None:
+        client = RecordingClient()
+        pg.generate_prompt(client, "image", "format_2", image_url="https://files.evolink.ai/u/photo.jpg")
+        parts = client.responses.calls[0]["input"][1]["content"]
+        assert parts[1]["type"] == "input_image"
+        assert parts[1]["image_url"] == "https://files.evolink.ai/u/photo.jpg"

@@ -1,4 +1,13 @@
-"""Image Generation mode — text-to-image generation with OpenAI's GPT Image models."""
+"""Image Generation mode — text-to-image generation with GPT Image models.
+
+Works with both providers selected in the sidebar:
+
+- **OpenAI** (default): the sync `/images` endpoints (`images.generate` / `images.edit`),
+  multipart uploads for reference images, responses come back base64.
+- **Evolink**: the async task API (`evolink_api.py`) — reference images are
+  uploaded to the Evolink file service for URLs, the task is polled with a
+  progress bar, and the finished image URLs are downloaded (valid 24h).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +16,8 @@ import io
 
 import streamlit as st
 from openai import BadRequestError
+
+from canvas_copilot.core import evolink_api as ev
 
 MODEL_OPTIONS = {
     "gpt-image-2.5-sunburst": "Sunburst (best editing precision)",
@@ -22,6 +33,14 @@ SIZE_OPTIONS = {
 }
 QUALITY_OPTIONS = {
     "auto": "Auto",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "xhigh": "X-High",
+    "max": "Max",
+}
+# Evolink's schema has no `auto` quality tier; its default is `medium`.
+QUALITY_OPTIONS_EVOLINK = {
     "low": "Low",
     "medium": "Medium",
     "high": "High",
@@ -44,24 +63,84 @@ FORMAT_MIME = {
 }
 
 
-def to_named_buffer(data: bytes, name: str) -> io.BytesIO:
-    """Wrap image bytes as a named buffer, as the edits endpoint expects."""
-    buffer = io.BytesIO(data)
-    buffer.name = name
+def collect_input_records(reference_files, handoff_image: dict | None) -> list[dict]:
+    """Merge the handoff image (from Prompt Generation) and uploaded references
+    into one ordered list of `{bytes, mime, name}` input records."""
+    records: list[dict] = []
+    if handoff_image:
+        records.append({
+            "bytes": handoff_image["bytes"],
+            "mime": handoff_image["mime"],
+            "name": handoff_image["name"],
+        })
+    for file in reference_files or []:
+        records.append({
+            "bytes": file.getvalue(),
+            "mime": file.type or "image/png",
+            "name": file.name,
+        })
+    return records
+
+
+def to_named_buffer(record: dict) -> io.BytesIO:
+    """Wrap an input record's bytes as a named buffer, as the edits endpoint expects."""
+    buffer = io.BytesIO(record["bytes"])
+    buffer.name = record["name"]
     return buffer
 
 
-def collect_input_images(reference_files, handoff_image: dict | None) -> list[io.BytesIO]:
-    """Merge the handoff image (from Prompt Generation) and uploaded references into edit inputs."""
-    input_images = []
-    if handoff_image:
-        input_images.append(to_named_buffer(handoff_image["bytes"], handoff_image["name"]))
-    for file in reference_files or []:
-        input_images.append(to_named_buffer(file.getvalue(), file.name))
-    return input_images
+def generate_images_evolink(
+    api_key: str,
+    prompt: str,
+    input_records: list[dict],
+    *,
+    model: str,
+    size: str,
+    quality: str,
+    n: int,
+    output_format: str,
+    on_progress=None,
+) -> list[bytes]:
+    """One Evolink image task end-to-end: upload refs → create → poll → download.
+
+    Returns the finished image bytes in the order the server returned them.
+    Raises RuntimeError with the server's reason when the task fails or comes
+    back empty.
+    """
+    image_urls = None
+    if input_records:
+        image_urls = [
+            ev.upload_image(api_key, record["bytes"], record["mime"], record["name"])
+            for record in input_records
+        ]
+    payload = ev.build_generation_payload(
+        model,
+        prompt,
+        size=size,
+        quality=quality,
+        n=n,
+        output_format=output_format,
+        image_urls=image_urls,
+    )
+    task = ev.create_generation_task(api_key, payload)
+    final_task = ev.poll_task(
+        lambda task_id: ev.fetch_task(api_key, task_id),
+        task["id"],
+        on_progress=on_progress,
+    )
+    if final_task["status"] != ev.STATUS_COMPLETED:
+        raise RuntimeError(ev.describe_failure(final_task))
+    urls = ev.extract_result_urls(final_task)
+    if not urls:
+        raise RuntimeError("Evolink marked the task completed but returned no images.")
+    return [ev.download_image(url) for url in urls]
 
 
-def render(client) -> None:
+def render(ctx) -> None:
+    """Render the mode. `ctx` is a providers.ProviderContext."""
+    is_evolink = ctx.is_evolink
+    client = ctx.client
+
     st.title("🎨 Canvas Copilot")
     st.caption("Describe anything — GPT Image paints it.")
 
@@ -74,8 +153,9 @@ def render(client) -> None:
         height=120,
     )
 
-    # Optional reference images. With inputs attached, the app switches from
-    # the generations endpoint to the edits endpoint (client.images.edit).
+    # Optional reference images. With inputs attached, OpenAI switches from the
+    # generations endpoint to the edits endpoint; Evolink receives them as
+    # uploaded file URLs for image-to-image / editing.
     reference_files = st.file_uploader(
         "Reference images (optional)",
         type=["png", "jpg", "jpeg", "webp"],
@@ -92,7 +172,7 @@ def render(client) -> None:
             with col:
                 st.image(file, caption=file.name, width="stretch")
 
-    # Image handed off from Prompt Generation ("💡 Use in Image Generation").
+    # Image handed off from Prompt Generation ("💡 Use in Image Generation"). 
     # Streamlit's uploader can't be pre-filled, so the image travels via session
     # state and stays attached until removed or replaced by another handoff.
     if st.session_state.get("pending_handoff_image"):
@@ -108,7 +188,23 @@ def render(client) -> None:
             st.session_state.pop("handoff_image", None)
             st.rerun()
 
-    model_col, size_col, quality_col, moderation_col = st.columns(4)
+    quality_menu = QUALITY_OPTIONS_EVOLINK if is_evolink else QUALITY_OPTIONS
+    quality_default = 1 if is_evolink else 0  # Evolink has no `auto`; default `medium`.
+    quality_help = (
+        "Rendering quality costs more output tokens at higher tiers (Evolink default: medium)."
+        if is_evolink
+        else "Sunburst wins on editing precision. Flare trades precision for faster everyday generation."
+    )
+    moderation_help = (
+        "Controls content-moderation strictness. auto: standard filtering "
+        "that limits potentially age-inappropriate content. low: less "
+        "restrictive filtering."
+    )
+
+    if is_evolink:
+        model_col, size_col, quality_col = st.columns(3)
+    else:
+        model_col, size_col, quality_col, moderation_col = st.columns(4)
     with model_col:
         model = st.selectbox(
             "Model",
@@ -120,18 +216,21 @@ def render(client) -> None:
     with size_col:
         size = st.selectbox("Size", list(SIZE_OPTIONS), format_func=SIZE_OPTIONS.get)
     with quality_col:
-        quality = st.selectbox("Quality", list(QUALITY_OPTIONS), format_func=QUALITY_OPTIONS.get)
-    with moderation_col:
-        moderation = st.selectbox(
-            "Moderation",
-            list(MODERATION_OPTIONS),
-            format_func=MODERATION_OPTIONS.get,
-            help=(
-                "Controls content-moderation strictness. auto: standard filtering "
-                "that limits potentially age-inappropriate content. low: less "
-                "restrictive filtering."
-            ),
+        quality = st.selectbox(
+            "Quality",
+            list(quality_menu),
+            format_func=quality_menu.get,
+            index=quality_default,
+            help=quality_help,
         )
+    if not is_evolink:
+        with moderation_col:
+            moderation = st.selectbox(
+                "Moderation",
+                list(MODERATION_OPTIONS),
+                format_func=MODERATION_OPTIONS.get,
+                help=moderation_help,
+            )
 
     variations_col, format_col, compression_col = st.columns(3)
     with variations_col:
@@ -150,7 +249,7 @@ def render(client) -> None:
             help="JPEG renders faster than PNG; WEBP and JPEG support compression.",
         )
     with compression_col:
-        if output_format in ("jpeg", "webp"):
+        if not is_evolink and output_format in ("jpeg", "webp"):
             compression = st.slider(
                 "Compression",
                 0,
@@ -159,6 +258,9 @@ def render(client) -> None:
                 step=5,
                 help="Lower values compress the image harder (smaller files, more artifacts). 100 = best quality.",
             )
+        elif is_evolink:
+            st.caption("Compression is not offered by Evolink.")
+            compression = None
         else:
             st.caption("Compression applies to JPEG / WEBP only.")
             compression = None
@@ -171,44 +273,62 @@ def render(client) -> None:
             st.warning("Please enter a prompt describing the image you want to create.")
         else:
             try:
-                # Compression only applies to JPEG and WEBP; omit it for PNG so the
-                # server default (none) applies instead of sending an explicit 0.
-                compression_payload = (
-                    {"output_compression": compression}
-                    if compression is not None
-                    else {}
-                )
+                input_records = collect_input_records(reference_files, handoff_image)
                 with st.spinner("Painting your image…"):
-                    # The edits endpoint expects file-like objects, not raw bytes.
-                    input_images = collect_input_images(reference_files, handoff_image)
-                    if input_images:
-                        result = client.images.edit(
+                    progress_bar = st.progress(0)
+                    if is_evolink:
+                        generated_images = generate_images_evolink(
+                            ctx.api_key,
+                            cleaned_prompt,
+                            input_records,
                             model=model,
-                            image=input_images,
-                            prompt=cleaned_prompt,
                             size=size,
                             quality=quality,
                             n=variations,
                             output_format=output_format,
-                            # SDK 3.13 has no typed `moderation` param on edit();
-                            # the /images/edits endpoint still accepts it in the body.
-                            extra_body={"moderation": moderation},
-                            **compression_payload,
+                            on_progress=lambda task: progress_bar.progress(
+                                min(int(task.get("progress") or 0), 100)
+                            ),
                         )
+                        progress_bar.progress(100)
                     else:
-                        result = client.images.generate(
-                            model=model,
-                            prompt=cleaned_prompt,
-                            size=size,
-                            quality=quality,
-                            moderation=moderation,
-                            n=variations,
-                            output_format=output_format,
-                            **compression_payload,
+                        # The edits endpoint expects file-like objects, not raw bytes.
+                        input_buffers = [to_named_buffer(record) for record in input_records]
+                        # Compression only applies to JPEG and WEBP; omit it for PNG so the
+                        # server default (none) applies instead of sending an explicit 0.
+                        compression_payload = (
+                            {"output_compression": compression}
+                            if compression is not None
+                            else {}
                         )
-                    generated_images = [
-                        base64.b64decode(item.b64_json) for item in result.data
-                    ]
+                        if input_buffers:
+                            result = client.images.edit(
+                                model=model,
+                                image=input_buffers,
+                                prompt=cleaned_prompt,
+                                size=size,
+                                quality=quality,
+                                n=variations,
+                                output_format=output_format,
+                                # SDK 3.13 has no typed `moderation` param on edit();
+                                # the /images/edits endpoint still accepts it in the body.
+                                extra_body={"moderation": moderation},
+                                **compression_payload,
+                            )
+                        else:
+                            result = client.images.generate(
+                                model=model,
+                                prompt=cleaned_prompt,
+                                size=size,
+                                quality=quality,
+                                moderation=moderation,
+                                n=variations,
+                                output_format=output_format,
+                                **compression_payload,
+                            )
+                        generated_images = [
+                            base64.b64decode(item.b64_json) for item in result.data
+                        ]
                 # Keep the results so they survive reruns (e.g. download-button clicks).
                 st.session_state["last_images"] = generated_images
                 st.session_state["last_prompt"] = cleaned_prompt
@@ -235,7 +355,7 @@ def render(client) -> None:
                         st.json({"moderation_stage": stage, "categories": categories})
                 else:
                     st.error(f"Image generation failed: {error}")
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 — surface any API failure in the UI
                 st.error(f"Image generation failed: {exc}")
 
     # --- Result section -----------------------------------------------------------

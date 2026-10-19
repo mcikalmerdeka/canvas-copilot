@@ -25,7 +25,7 @@ if not os.getenv("OPENAI_API_KEY"):
 
 from openai import OpenAI  # noqa: E402
 
-import prompt_generation as pg  # noqa: E402
+import canvas_copilot.modes.prompt_generation as pg  # noqa: E402
 
 
 def test_live_upgrade_prompt_with_gpt_6_luna() -> None:

@@ -9,9 +9,7 @@ Image-Edit Prompt capability loads its own exemplar the same way.
 
 from __future__ import annotations
 
-from pathlib import Path
-
-PROJECT_ROOT = Path(__file__).resolve().parent
+from canvas_copilot import PACKAGE_ROOT
 
 # ---------------------------------------------------------------------------
 # Registry
@@ -40,8 +38,9 @@ PROMPT_FORMATS: dict[str, dict[str, object]] = {
 
 # Exemplar text is joined into the registry after the definitions above so the
 # entries stay declarative (one reason: keeps the mapping readable at a glance).
+# Paths resolve from the package root, where `prompts/` lives in the src layout.
 for _fmt in PROMPT_FORMATS.values():
-    _fmt["exemplar_text"] = (PROJECT_ROOT / _fmt["exemplar_path"]).read_text(encoding="utf-8")
+    _fmt["exemplar_text"] = (PACKAGE_ROOT / _fmt["exemplar_path"]).read_text(encoding="utf-8")
 del _fmt
 
 
@@ -49,7 +48,7 @@ del _fmt
 # generation formats above): a pair of finished edit prompts showing the removal and
 # extension skeletons the model should emulate.
 EDIT_EXEMPLAR_PATH = "prompts/edit_prompt.md"
-EDIT_EXEMPLAR = (PROJECT_ROOT / EDIT_EXEMPLAR_PATH).read_text(encoding="utf-8")
+EDIT_EXEMPLAR = (PACKAGE_ROOT / EDIT_EXEMPLAR_PATH).read_text(encoding="utf-8")
 
 
 def get_format(format_id: str) -> dict[str, object]:

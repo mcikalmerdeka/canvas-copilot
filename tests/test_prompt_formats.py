@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from prompt_formats import (
+from canvas_copilot.modes.prompt_formats import (
     EDIT_EXEMPLAR,
     EDIT_EXEMPLAR_PATH,
     PROMPT_FORMATS,
@@ -30,14 +30,14 @@ class TestRegistryContents:
             assert isinstance(fmt["exemplar_text"], str)
             assert fmt["exemplar_text"].strip(), f"{fmt['id']} exemplar must not be empty"
 
-    def test_every_format_has_exemplar_path_pointing_to_real_file(self, project_root: Path) -> None:
+    def test_every_format_has_exemplar_path_pointing_to_real_file(self, package_root: Path) -> None:
         for fmt in PROMPT_FORMATS.values():
-            path = project_root / fmt["exemplar_path"]
+            path = package_root / fmt["exemplar_path"]
             assert path.is_file(), f"missing exemplar file: {fmt['exemplar_path']}"
 
-    def test_in_memory_exemplar_matches_file_content(self, project_root: Path) -> None:
+    def test_in_memory_exemplar_matches_file_content(self, package_root: Path) -> None:
         for fmt in PROMPT_FORMATS.values():
-            path = project_root / fmt["exemplar_path"]
+            path = package_root / fmt["exemplar_path"]
             assert path.read_text(encoding="utf-8") == fmt["exemplar_text"]
 
     def test_is_json_flag_is_true_only_for_format_3(self) -> None:
@@ -55,16 +55,16 @@ class TestRegistryContents:
 class TestEditExemplar:
     """The Image-Edit Prompt capability ships its own exemplar outside the registry."""
 
-    def test_edit_exemplar_path_points_to_real_file(self, project_root: Path) -> None:
-        path = project_root / EDIT_EXEMPLAR_PATH
+    def test_edit_exemplar_path_points_to_real_file(self, package_root: Path) -> None:
+        path = package_root / EDIT_EXEMPLAR_PATH
         assert path.is_file(), f"missing edit exemplar file: {EDIT_EXEMPLAR_PATH}"
 
     def test_edit_exemplar_text_is_loaded_and_non_empty(self) -> None:
         assert isinstance(EDIT_EXEMPLAR, str)
         assert EDIT_EXEMPLAR.strip(), "edit exemplar must not be empty"
 
-    def test_edit_exemplar_matches_file_content(self, project_root: Path) -> None:
-        path = project_root / EDIT_EXEMPLAR_PATH
+    def test_edit_exemplar_matches_file_content(self, package_root: Path) -> None:
+        path = package_root / EDIT_EXEMPLAR_PATH
         assert path.read_text(encoding="utf-8") == EDIT_EXEMPLAR
 
     def test_edit_exemplar_is_not_part_of_the_three_format_registry(self) -> None:
