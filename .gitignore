@@ -16,3 +16,7 @@ wheels/
 # reference/
 prompts/
 example/
+
+# AXIOM
+.agents/
+.env.axiom
