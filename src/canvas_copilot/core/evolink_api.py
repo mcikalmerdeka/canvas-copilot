@@ -63,27 +63,39 @@ def build_generation_payload(
     model: str,
     prompt: str,
     *,
-    size: str,
-    quality: str,
-    n: int,
-    output_format: str,
+    size: str | None = None,
+    quality: str | None = None,
+    n: int | None = None,
+    output_format: str | None = None,
     image_urls: list[str] | None = None,
+    resolution: str | None = None,
+    model_params: dict[str, Any] | None = None,
+    negative_prompt: str | None = None,
 ) -> dict[str, Any]:
-    """Body for POST /v1/images/generations.
+    """Body for POST /v1/images/generations — model-agnostic.
 
-    Evolink's schema has no `moderation` field and no `output_compression`, and
-    `quality` has no `auto` tier — callers pick from the provider's own menus.
+    Every optional field is omitted when not given, so each model's exact
+    schema is respected by the caller passing only what that model supports
+    (see `core/model_registry.py`). Note Evolink has no `moderation` field and
+    no `output_compression`, and `quality` has no `auto` tier.
     """
-    payload: dict[str, Any] = {
-        "model": model,
-        "prompt": prompt,
-        "size": size,
-        "quality": quality,
-        "n": n,
-        "output_format": output_format,
-    }
+    payload: dict[str, Any] = {"model": model, "prompt": prompt}
+    if size is not None:
+        payload["size"] = size
+    if quality is not None:
+        payload["quality"] = quality
+    if n is not None:
+        payload["n"] = n
+    if output_format is not None:
+        payload["output_format"] = output_format
     if image_urls:
         payload["image_urls"] = list(image_urls)
+    if resolution is not None:
+        payload["resolution"] = resolution
+    if model_params:
+        payload["model_params"] = dict(model_params)
+    if negative_prompt:
+        payload["negative_prompt"] = negative_prompt
     return payload
 
 

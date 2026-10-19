@@ -83,6 +83,33 @@ class TestGenerationPayload:
         assert "moderation" not in payload
 
 
+class TestGeneralizedPayload:
+    """Beyond gpt-image-2.5, models take different params — anything None is omitted."""
+
+    def test_fields_left_none_are_omitted(self) -> None:
+        payload = ev.build_generation_payload(model="mj-v8.2", prompt="a cat")
+        assert payload == {"model": "mj-v8.2", "prompt": "a cat"}
+
+    def test_resolution_is_included_when_given(self) -> None:
+        payload = ev.build_generation_payload(
+            model="grok-imagine-image-2.0", prompt="p", size="16:9", quality="low",
+            resolution="2K", n=1,
+        )
+        assert payload["resolution"] == "2K"
+
+    def test_model_params_are_passed_through_verbatim(self) -> None:
+        payload = ev.build_generation_payload(
+            model="mj-v8.2", prompt="p", quality="standard", model_params={"speed": "fast"},
+        )
+        assert payload["model_params"] == {"speed": "fast"}
+
+    def test_negative_prompt_is_included_when_given(self) -> None:
+        payload = ev.build_generation_payload(
+            model="qwen-image-3.0", prompt="p", quality="1K", negative_prompt="blurry, text",
+        )
+        assert payload["negative_prompt"] == "blurry, text"
+
+
 class TestPollTask:
     @staticmethod
     def fake_fetch(statuses):

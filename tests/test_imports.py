@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import canvas_copilot as package  # noqa: I001 — order matters below (package first)
 import canvas_copilot.core.evolink_api as evolink_api
+import canvas_copilot.core.model_registry as model_registry
 import canvas_copilot.modes.image_generation as image_generation
 import canvas_copilot.modes.prompt_formats as prompt_formats
 import canvas_copilot.modes.prompt_generation as prompt_generation
@@ -39,6 +40,13 @@ def test_core_evolink_api_exposes_the_client_api() -> None:
         "download_image",
     ):
         assert callable(getattr(evolink_api, name)), name
+
+
+def test_core_model_registry_exposes_the_catalog_api() -> None:
+    assert "mj-v8.2" in model_registry.EVOLINK_MODELS
+    assert model_registry.EvolinkModel
+    for name in ("build_model_prompt", "aspect_prompt_flag"):
+        assert callable(getattr(model_registry, name)), name
 
 
 def test_modes_expose_their_renderers_and_registry() -> None:
