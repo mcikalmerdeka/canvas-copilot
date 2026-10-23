@@ -14,12 +14,16 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
+import time
 
 import streamlit as st
 from openai import BadRequestError
 
 from canvas_copilot.core import evolink_api as ev
 from canvas_copilot.core import model_registry as mr
+
+logger = logging.getLogger(__name__)
 
 MODEL_OPTIONS = {
     "gpt-image-2.5-sunburst": "Sunburst (best editing precision)",
@@ -122,10 +126,16 @@ def generate_images_evolink(
     """
     reference_urls: list[str] = []
     if input_records and spec.max_reference_images > 0:
-        reference_urls = [
-            ev.upload_image(api_key, record["bytes"], record["mime"], record["name"])
-            for record in input_records
-        ]
+        for reference_index, record in enumerate(input_records, start=1):
+            reference_urls.append(
+                ev.upload_image(api_key, record["bytes"], record["mime"], record["name"])
+            )
+            logger.info(
+                "Reference image uploaded (%d/%d): %s",
+                reference_index,
+                len(input_records),
+                record["name"],
+            )
 
     model_prompt = mr.build_model_prompt(spec, prompt, reference_urls)
     if spec.aspect_via_prompt:
@@ -156,6 +166,7 @@ def generate_images_evolink(
         negative_prompt=negative_prompt,
     )
     task = ev.create_generation_task(api_key, payload)
+    logger.info("Generation task created: %s", task["id"])
     final_task = ev.poll_task(
         lambda task_id: ev.fetch_task(api_key, task_id),
         task["id"],
@@ -166,6 +177,7 @@ def generate_images_evolink(
     urls = ev.extract_result_urls(final_task)
     if not urls:
         raise RuntimeError("Evolink marked the task completed but returned no images.")
+    logger.info("Task completed: %d image(s) ready to download", len(urls))
     return [ev.download_image(url) for url in urls]
 
 
@@ -384,6 +396,17 @@ def render(ctx) -> None:
             help="Content to keep out of the image (max 500 characters).",
         ) or None
 
+    # OpenAI only: Evolink's task API has no moderation field (and the tests
+    # pin that it must never send one).
+    moderation = None
+    if not is_evolink:
+        moderation = st.selectbox(
+            "Moderation",
+            list(MODERATION_OPTIONS),
+            format_func=MODERATION_OPTIONS.get,
+            help="Low relaxes the standard content filter for edge-case requests.",
+        )
+
     generate = st.button("Generate", type="primary", width="stretch")
 
     if generate:
@@ -397,6 +420,14 @@ def render(ctx) -> None:
             else:
                 try:
                     input_records = collect_input_records(reference_files, handoff_image)
+                    start_time = time.perf_counter()
+                    logger.info(
+                        "Image generation started (model=%s, size=%s, n=%s, refs=%d)",
+                        spec.model_id if spec else model,
+                        size,
+                        variations,
+                        len(input_records),
+                    )
                     with st.spinner("Painting your image…"):
                         progress_bar = st.progress(0)
                         if is_evolink:
@@ -455,6 +486,11 @@ def render(ctx) -> None:
                             generated_images = [
                                 base64.b64decode(item.b64_json) for item in result.data
                             ]
+                    logger.info(
+                        "Image generation finished: %d image(s) in %.1fs",
+                        len(generated_images),
+                        time.perf_counter() - start_time,
+                    )
                     # Keep the results so they survive reruns (e.g. download-button clicks).
                     st.session_state["last_images"] = generated_images
                     st.session_state["last_prompt"] = cleaned_prompt
@@ -468,6 +504,12 @@ def render(ctx) -> None:
                         categories = details.get("categories") or []
                         stage = details.get("moderation_stage")
 
+                        logger.warning(
+                            "Request blocked by moderation (stage=%s, categories=%s)",
+                            stage,
+                            categories,
+                        )
+
                         hint = "Try changing the prompt and generating again."
                         if "harassment" in categories:
                             hint = "Try removing abusive or targeting language and focus on neutral visual details instead."
@@ -480,8 +522,10 @@ def render(ctx) -> None:
                         with st.expander("Show moderation details"):
                             st.json({"moderation_stage": stage, "categories": categories})
                     else:
+                        logger.error("Image generation failed: %s", error)
                         st.error(f"Image generation failed: {error}")
                 except Exception as exc:  # noqa: BLE001 — surface any API failure in the UI
+                    logger.error("Image generation failed: %s", exc)
                     st.error(f"Image generation failed: {exc}")
 
     # --- Result section -----------------------------------------------------------

@@ -8,6 +8,8 @@ A sidebar "Provider" radio picks the backend for both modes (settings/providers.
 **OpenAI** (official API) or **Evolink** (aggregator, EVOLINK_API_KEY).
 """
 
+import logging
+
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -15,6 +17,17 @@ from canvas_copilot.modes import image_generation, prompt_generation
 from canvas_copilot.settings import providers
 
 MODES = ("Image Generation", "Prompt Generation")
+
+# Terminal progress logging for generation milestones (source image uploads,
+# task progress, prompt/image finished, failures). Root stays at WARNING so
+# third-party chatter (openai/httpx DEBUG|INFO) doesn't flood the console;
+# only this package's loggers emit at INFO.
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    datefmt="%H:%M:%S",
+)
+logging.getLogger("canvas_copilot").setLevel(logging.INFO)
 
 load_dotenv()
 

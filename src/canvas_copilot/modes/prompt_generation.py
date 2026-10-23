@@ -9,6 +9,8 @@ prompt in exactly that format.
 from __future__ import annotations
 
 import json
+import logging
+import time
 
 import streamlit as st
 
@@ -20,6 +22,8 @@ from canvas_copilot.modes.prompt_formats import (
     label_to_id,
 )
 from canvas_copilot.settings import providers as pr
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Model configuration
@@ -215,6 +219,12 @@ def generate_prompt(
 ) -> str:
     """One blocking call to `gpt-6-luna`; returns the finished prompt text."""
     system_prompt = build_edit_system_prompt() if capability == PIPELINE_EDIT else build_system_prompt(format_id)
+    logger.info(
+        "Prompt generation started (capability=%s, format=%s)",
+        capability,
+        format_id or "-",
+    )
+    start_time = time.perf_counter()
     response = client.responses.create(
         model=MODEL,
         reasoning={"effort": REASONING_EFFORT},
@@ -235,7 +245,13 @@ def generate_prompt(
             },
         ],
     )
-    return strip_code_fences(extract_output_text(response))
+    finished = strip_code_fences(extract_output_text(response))
+    logger.info(
+        "Prompt finished: %d characters in %.1fs",
+        len(finished),
+        time.perf_counter() - start_time,
+    )
+    return finished
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +370,10 @@ def _handle_generate(ctx: pr.ProviderContext, capability: str, fmt_id: str | Non
                     image_file.type or "image/png",
                     image_file.name,
                 )
+                if ctx.is_evolink:
+                    logger.info("Source image uploaded to file service: %s", image_file.name)
+                else:
+                    logger.info("Source image embedded inline (data URL): %s", image_file.name)
             if capability == CAPABILITY_UPGRADE:
                 generated = generate_prompt(ctx.client, PIPELINE_TEXT, fmt_id, raw_prompt=raw_prompt.strip())
                 source = f"Raw prompt: {raw_prompt.strip()[:80]}…"
@@ -388,6 +408,7 @@ def _handle_generate(ctx: pr.ProviderContext, capability: str, fmt_id: str | Non
         else:
             st.session_state.pop("pg_result_image", None)
     except Exception as exc:  # noqa: BLE001 — surface any API/SDK failure in the UI
+        logger.error("Prompt generation failed: %s", exc)
         st.error(f"Prompt generation failed: {exc}")
 
 

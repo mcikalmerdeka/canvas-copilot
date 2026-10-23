@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from types import SimpleNamespace
 
 import canvas_copilot.modes.prompt_generation as pg
@@ -258,3 +259,19 @@ class TestUserContentWithImageUrl:
         parts = client.responses.calls[0]["input"][1]["content"]
         assert parts[1]["type"] == "input_image"
         assert parts[1]["image_url"] == "https://files.evolink.ai/u/photo.jpg"
+
+
+class TestGenerationLogging:
+    def test_start_and_finish_are_logged(self, caplog) -> None:
+        """Started/finished lines reach the terminal log; output is unchanged."""
+        client = RecordingClient(output_text="SAMPLE PROMPT OUTPUT")
+        with caplog.at_level(logging.INFO, logger="canvas_copilot.modes.prompt_generation"):
+            result = pg.generate_prompt(client, capability="text", format_id="format_2", raw_prompt="idea")
+        messages = [
+            rec.getMessage()
+            for rec in caplog.records
+            if rec.name == "canvas_copilot.modes.prompt_generation"
+        ]
+        assert any(msg.startswith("Prompt generation started (capability=text, format=format_2)") for msg in messages)
+        assert any(msg.startswith("Prompt finished") and "20 characters" in msg for msg in messages)
+        assert result == "SAMPLE PROMPT OUTPUT"
