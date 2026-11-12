@@ -111,7 +111,7 @@ EVOLINK_MODELS: dict[str, EvolinkModel] = {
     # lower than requested.
     "gpt-image-2.6-sunburst": EvolinkModel(
         model_id="gpt-image-2.6-sunburst",
-        label="Sunburst 2.6 (best detail & editing)",
+        label="GPT Sunburst 2.6",
         size_options=_GPT_26_SIZES,
         quality_options=_GPT_QUALITY,
         resolution_options=_GPT_26_RESOLUTION,
@@ -121,7 +121,7 @@ EVOLINK_MODELS: dict[str, EvolinkModel] = {
     ),
     "gpt-image-2.6-flare": EvolinkModel(
         model_id="gpt-image-2.6-flare",
-        label="Flare 2.6 (fast iteration)",
+        label="GPT Flare 2.6",
         size_options=_GPT_26_SIZES,
         quality_options=_GPT_QUALITY,
         resolution_options=_GPT_26_RESOLUTION,
@@ -131,7 +131,7 @@ EVOLINK_MODELS: dict[str, EvolinkModel] = {
     ),
     "gpt-image-2.5-sunburst": EvolinkModel(
         model_id="gpt-image-2.5-sunburst",
-        label="Sunburst (best editing precision)",
+        label="GPT Sunburst 2.5",
         size_options=_GPT_SIZES,
         quality_options=_GPT_QUALITY,
         max_variations=10,
@@ -140,7 +140,7 @@ EVOLINK_MODELS: dict[str, EvolinkModel] = {
     ),
     "gpt-image-2.5-flare": EvolinkModel(
         model_id="gpt-image-2.5-flare",
-        label="Flare (faster, everyday quality)",
+        label="GPT Flare 2.5",
         size_options=_GPT_SIZES,
         quality_options=_GPT_QUALITY,
         max_variations=10,

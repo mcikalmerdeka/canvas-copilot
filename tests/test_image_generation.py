@@ -331,15 +331,12 @@ class TestOpenAIModelOptions:
     """The official-API dropdown offers 2.6 first, with 2.5 still selectable."""
 
     def test_menu_lists_both_families_with_2_6_as_the_default(self) -> None:
-        assert list(ig.MODEL_OPTIONS) == [
-            "gpt-image-2.6-sunburst",
-            "gpt-image-2.6-flare",
-            "gpt-image-2.5-sunburst",
-            "gpt-image-2.5-flare",
-        ]
-        labels = list(ig.MODEL_OPTIONS.values())
-        assert len(set(labels)) == len(labels)
-        assert all(label.strip() for label in labels)
+        assert ig.MODEL_OPTIONS == {
+            "gpt-image-2.6-sunburst": "GPT Sunburst 2.6",
+            "gpt-image-2.6-flare": "GPT Flare 2.6",
+            "gpt-image-2.5-sunburst": "GPT Sunburst 2.5",
+            "gpt-image-2.5-flare": "GPT Flare 2.5",
+        }
 
 
 class TestOpenAIGenerateFlow:

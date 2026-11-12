@@ -26,10 +26,10 @@ from canvas_copilot.core import model_registry as mr
 logger = logging.getLogger(__name__)
 
 MODEL_OPTIONS = {
-    "gpt-image-2.6-sunburst": "Sunburst 2.6 (best detail & editing)",
-    "gpt-image-2.6-flare": "Flare 2.6 (fast iteration)",
-    "gpt-image-2.5-sunburst": "Sunburst 2.5 (previous generation)",
-    "gpt-image-2.5-flare": "Flare 2.5 (previous generation)",
+    "gpt-image-2.6-sunburst": "GPT Sunburst 2.6",
+    "gpt-image-2.6-flare": "GPT Flare 2.6",
+    "gpt-image-2.5-sunburst": "GPT Sunburst 2.5",
+    "gpt-image-2.5-flare": "GPT Flare 2.5",
 }
 SIZE_OPTIONS = {
     "auto": "Auto",
@@ -281,7 +281,7 @@ def render(ctx) -> None:
                 list(MODEL_OPTIONS),
                 format_func=MODEL_OPTIONS.get,
                 index=0,
-                help="2.6 is the newest family: Sunburst for detail and editing precision, Flare for faster iteration. 2.5 stays selectable.",
+                help="2.6 is the newest family; 2.5 remains selectable.",
             )
     with columns[1]:
         if size_menu:

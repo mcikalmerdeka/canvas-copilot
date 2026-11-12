@@ -31,6 +31,27 @@ class TestRegistryCatalog:
         assert all(label.strip() for label in labels)
 
 
+class TestDisplayLabels:
+    def test_no_model_label_carries_a_parenthetical_description(self) -> None:
+        labels = [spec.label for spec in mr.EVOLINK_MODELS.values()]
+        assert all("(" not in label and ")" not in label for label in labels)
+
+    def test_gpt_image_25_labels_name_the_family_and_version(self) -> None:
+        assert mr.EVOLINK_MODELS["gpt-image-2.5-sunburst"].label == "GPT Sunburst 2.5"
+        assert mr.EVOLINK_MODELS["gpt-image-2.5-flare"].label == "GPT Flare 2.5"
+
+    def test_gpt_image_26_labels_name_the_family_and_version(self) -> None:
+        assert mr.EVOLINK_MODELS["gpt-image-2.6-sunburst"].label == "GPT Sunburst 2.6"
+        assert mr.EVOLINK_MODELS["gpt-image-2.6-flare"].label == "GPT Flare 2.6"
+
+    def test_every_gpt_model_label_starts_with_the_family_name(self) -> None:
+        for model_id in (
+            "gpt-image-2.6-sunburst", "gpt-image-2.6-flare",
+            "gpt-image-2.5-sunburst", "gpt-image-2.5-flare",
+        ):
+            assert mr.EVOLINK_MODELS[model_id].label.startswith("GPT ")
+
+
 class TestGptImage26Models:
     def test_sizes_cover_auto_the_fifteen_ratios_and_pixels(self) -> None:
         for model_id in ("gpt-image-2.6-sunburst", "gpt-image-2.6-flare"):
