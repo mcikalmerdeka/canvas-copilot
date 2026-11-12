@@ -11,7 +11,7 @@ import canvas_copilot.core.model_registry as mr
 
 
 class TestRegistryCatalog:
-    def test_nine_models_in_the_documented_order(self) -> None:
+    def test_eleven_models_in_the_documented_order(self) -> None:
         ids = tuple(spec.model_id for spec in mr.EVOLINK_MODELS.values())
         assert ids == (
             "gpt-image-2.6-sunburst",
@@ -23,6 +23,8 @@ class TestRegistryCatalog:
             "mj-v8.2",
             "qwen-image-3.0",
             "qwen-image-3.0-pro",
+            "doubao-seedream-5.5",
+            "minimax-h3-image",
         )
 
     def test_labels_are_unique_and_human_readable(self) -> None:
@@ -194,6 +196,69 @@ class TestQwenModels:
         assert "auto" in values
         assert "16:9" in values
         assert "1024x1024" in values
+
+
+class TestSeedream55:
+    def test_model_id_and_label(self) -> None:
+        spec = mr.EVOLINK_MODELS["doubao-seedream-5.5"]
+        assert spec.model_id == "doubao-seedream-5.5"
+        assert spec.label == "Seedream 5.5"
+
+    def test_sizes_are_the_documented_eleven_ratios_and_pixels(self) -> None:
+        spec = mr.EVOLINK_MODELS["doubao-seedream-5.5"]
+        values = [value for value, _ in spec.size_options]
+        assert "auto" in values
+        assert {
+            "1:1", "2:3", "3:2", "3:4", "4:3", "4:5",
+            "5:4", "9:16", "16:9", "21:9", "9:21",
+        } <= set(values)
+        assert len([value for value in values if ":" in value]) == 11
+        assert "1024x1024" in values
+
+    def test_quality_is_resolution_tiers_defaulting_to_1k(self) -> None:
+        spec = mr.EVOLINK_MODELS["doubao-seedream-5.5"]
+        assert [value for value, _ in spec.quality_options] == ["1K", "1.5K", "2K"]
+        assert spec.quality_default == "1K"
+        assert spec.resolution_options is None
+
+    def test_one_image_ten_references_and_png_jpeg_only(self) -> None:
+        spec = mr.EVOLINK_MODELS["doubao-seedream-5.5"]
+        assert spec.max_variations == 1
+        assert spec.max_reference_images == 10
+        assert spec.supports_output_format is True
+        assert spec.output_format_options == (("png", "PNG"), ("jpeg", "JPEG"))
+
+
+class TestMiniMaxH3Image:
+    def test_model_id_and_label(self) -> None:
+        spec = mr.EVOLINK_MODELS["minimax-h3-image"]
+        assert spec.model_id == "minimax-h3-image"
+        assert spec.label == "MiniMax H3 Image"
+
+    def test_sizes_cover_the_fifteen_ratios_and_pixels(self) -> None:
+        spec = mr.EVOLINK_MODELS["minimax-h3-image"]
+        values = [value for value, _ in spec.size_options]
+        assert "auto" in values
+        assert {"1:1", "16:9", "21:9", "1:3", "3:1"} <= set(values)
+        assert len([value for value in values if ":" in value]) == 15
+        assert "1024x1024" in values
+
+    def test_has_no_quality_parameter(self) -> None:
+        assert mr.EVOLINK_MODELS["minimax-h3-image"].quality_options is None
+
+    def test_resolution_is_the_separate_1k_2k_4k_tier_defaulting_to_2k(self) -> None:
+        spec = mr.EVOLINK_MODELS["minimax-h3-image"]
+        assert [value for value, _ in spec.resolution_options] == ["1K", "2K", "4K"]
+        assert spec.resolution_default == "2K"
+
+    def test_variations_references_and_all_three_formats(self) -> None:
+        spec = mr.EVOLINK_MODELS["minimax-h3-image"]
+        assert spec.max_variations == 10
+        assert spec.max_reference_images == 16
+        assert spec.supports_output_format is True
+        assert spec.output_format_options == (
+            ("png", "PNG"), ("jpeg", "JPEG"), ("webp", "WEBP"),
+        )
 
 
 class TestBuildModelPrompt:

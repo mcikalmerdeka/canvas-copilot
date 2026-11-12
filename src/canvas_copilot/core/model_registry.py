@@ -6,12 +6,13 @@ menus and validates its request from this spec, so the UI automatically adapts
 when a model is added or its schema changes:
 
 - every model shares `POST /v1/images/generations` + task polling, but
-- `quality` means resolution tiers (1K/2K/4K) on Nano Banana / Qwen and token
-  tiers (low…max) on GPT Image 2.6 / 2.5, Grok adds a separate `resolution`
-  param, GPT Image 2.6 also takes a separate 1K/2K/4K `resolution` param,
-  Midjourney takes its aspect ratio inside the prompt (`--ar`) and its
-  reference images as URLs prepended to the prompt text, and `n` is
-  unsupported on Nano Banana and Midjourney.
+- `quality` means resolution tiers (1K/2K/4K) on Nano Banana / Qwen, token
+  tiers (low…max) on GPT Image 2.6 / 2.5, and 1K/1.5K/2K on Seedream 5.5;
+  MiniMax H3 Image has no `quality` field at all. Grok adds a separate
+  `resolution` param, GPT Image 2.6 and MiniMax H3 Image take a separate
+  1K/2K/4K `resolution` param, Midjourney takes its aspect ratio inside the
+  prompt (`--ar`) and its reference images as URLs prepended to the prompt
+  text, and `n` is unsupported on Nano Banana, Seedream, and Midjourney.
 """
 
 from __future__ import annotations
@@ -38,13 +39,14 @@ class EvolinkModel:
     max_variations: int = 1
     max_reference_images: int = 0
     supports_output_format: bool = False
+    output_format_options: tuple[Option, ...] | None = None
     references_in_prompt: bool = False
     aspect_via_prompt: bool = False
     supports_negative_prompt: bool = False
 
 
 def _pixel_options() -> tuple[Option, ...]:
-    """The app's pixel-format sizes, shared by GPT Image 2.5 and Qwen."""
+    """The app's pixel-format sizes, shared by the GPT Image, Qwen, Seedream, and MiniMax models."""
     return (
         ("1024x1024", "1024 × 1024 · Square"),
         ("1024x1536", "1024 × 1536 · Portrait"),
@@ -67,9 +69,17 @@ _GPT_SIZES: tuple[Option, ...] = _ratio_options(
     ("1:1", "2:1", "1:2", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "9:21")
 ) + _pixel_options()
 
-# GPT Image 2.6's documented ratio set adds the extreme 1:3 / 3:1 pair.
-_GPT_26_SIZES: tuple[Option, ...] = _ratio_options(
-    ("1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "9:21")
+# GPT Image 2.6 and MiniMax H3 Image share the documented 15-ratio set,
+# including the extreme 1:3 / 3:1 pair.
+_RATIOS_15: tuple[str, ...] = (
+    "1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3",
+    "4:5", "5:4", "9:16", "16:9", "21:9", "9:21",
+)
+_GPT_26_SIZES: tuple[Option, ...] = _ratio_options(_RATIOS_15) + _pixel_options()
+_MINIMAX_SIZES: tuple[Option, ...] = _ratio_options(_RATIOS_15) + _pixel_options()
+
+_SEEDREAM_SIZES: tuple[Option, ...] = _ratio_options(
+    ("1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "9:21")
 ) + _pixel_options()
 
 _NANO_SIZES: tuple[Option, ...] = _ratio_options(
@@ -94,6 +104,12 @@ _GPT_QUALITY: tuple[Option, ...] = (
 _GPT_26_RESOLUTION: tuple[Option, ...] = (
     ("1K", "1K (~1 MP)"), ("2K", "2K (~4 MP)"), ("4K", "4K (~8.3 MP)"),
 )
+_MINIMAX_RESOLUTION: tuple[Option, ...] = (
+    ("1K", "1K (~1 MP)"), ("2K", "2K (~4 MP)"), ("4K", "4K (~16.8 MP)"),
+)
+_SEEDREAM_QUALITY: tuple[Option, ...] = (
+    ("1K", "1K (~1 MP)"), ("1.5K", "1.5K (~2.25 MP)"), ("2K", "2K (~4 MP)"),
+)
 _GROK_QUALITY: tuple[Option, ...] = (("low", "Low"), ("medium", "Medium"))
 _RESOLUTION_TIERS: tuple[Option, ...] = (("1K", "1K (~1 MP)"), ("2K", "2K (~4 MP)"))
 _NANO_QUALITY: tuple[Option, ...] = (
@@ -102,6 +118,10 @@ _NANO_QUALITY: tuple[Option, ...] = (
 _QWEN_QUALITY: tuple[Option, ...] = (("1K", "1K (~1 MP)"), ("2K", "2K (~4 MP)"))
 _MJ_QUALITY: tuple[Option, ...] = (("standard", "Standard"), ("hd", "HD (native 2K)"))
 _MJ_SPEED: tuple[Option, ...] = (("fast", "Fast (4 images)"), ("draft", "Draft (24 sketches)"))
+_PNG_JPEG_FORMATS: tuple[Option, ...] = (("png", "PNG"), ("jpeg", "JPEG"))
+_PNG_JPEG_WEBP_FORMATS: tuple[Option, ...] = (
+    ("png", "PNG"), ("jpeg", "JPEG"), ("webp", "WEBP"),
+)
 
 
 EVOLINK_MODELS: dict[str, EvolinkModel] = {
@@ -194,6 +214,31 @@ EVOLINK_MODELS: dict[str, EvolinkModel] = {
         max_variations=6,
         max_reference_images=3,
         supports_negative_prompt=True,
+    ),
+    # Evolink's docs still show a "not yet available" banner for Seedream 5.5,
+    # but the live endpoint accepts the model ID (checked 2026-11-13).
+    "doubao-seedream-5.5": EvolinkModel(
+        model_id="doubao-seedream-5.5",
+        label="Seedream 5.5",
+        size_options=_SEEDREAM_SIZES,
+        quality_options=_SEEDREAM_QUALITY,
+        quality_default="1K",
+        max_variations=1,
+        max_reference_images=10,
+        supports_output_format=True,
+        output_format_options=_PNG_JPEG_FORMATS,
+    ),
+    "minimax-h3-image": EvolinkModel(
+        model_id="minimax-h3-image",
+        label="MiniMax H3 Image",
+        size_options=_MINIMAX_SIZES,
+        quality_options=None,
+        resolution_options=_MINIMAX_RESOLUTION,
+        resolution_default="2K",
+        max_variations=10,
+        max_reference_images=16,
+        supports_output_format=True,
+        output_format_options=_PNG_JPEG_WEBP_FORMATS,
     ),
 }
 

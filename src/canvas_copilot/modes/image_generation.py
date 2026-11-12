@@ -204,8 +204,8 @@ def render(ctx) -> None:
         spec = mr.EVOLINK_MODELS[model_id]
         size_menu = dict(spec.size_options) if spec.size_options else None
         aspect_menu = MJ_ASPECT_OPTIONS if spec.aspect_via_prompt else None
-        quality_menu = dict(spec.quality_options)
-        quality_index = list(quality_menu).index(spec.quality_default)
+        quality_menu = dict(spec.quality_options) if spec.quality_options else None
+        quality_index = list(quality_menu).index(spec.quality_default) if quality_menu else 0
         resolution_menu = dict(spec.resolution_options) if spec.resolution_options else None
         speed_menu = dict(spec.speed_options) if spec.speed_options else None
     else:
@@ -298,17 +298,21 @@ def render(ctx) -> None:
         else:
             size = "auto"
     with columns[2]:
-        quality = st.selectbox(
-            "Quality",
-            list(quality_menu),
-            format_func=quality_menu.get,
-            index=quality_index,
-            help=(
-                "Rendering quality — higher tiers cost more output tokens."
-                if is_evolink
-                else "OpenAI decides automatically; tiers trade cost for detail."
-            ),
-        )
+        if quality_menu:
+            quality = st.selectbox(
+                "Quality",
+                list(quality_menu),
+                format_func=quality_menu.get,
+                index=quality_index,
+                help=(
+                    "Rendering quality — higher tiers cost more output tokens."
+                    if is_evolink
+                    else "OpenAI decides automatically; tiers trade cost for detail."
+                ),
+            )
+        else:
+            st.caption("Quality is controlled by the resolution tier.")
+            quality = None
     if resolution_menu or speed_menu:
         with columns[3]:
             if resolution_menu:
@@ -345,10 +349,11 @@ def render(ctx) -> None:
             variations = None
     with row2[1]:
         if is_evolink and spec and spec.supports_output_format:
+            format_menu = dict(spec.output_format_options or FORMAT_OPTIONS)
             output_format = st.selectbox(
                 "Format",
-                list(FORMAT_OPTIONS),
-                format_func=FORMAT_OPTIONS.get,
+                list(format_menu),
+                format_func=format_menu.get,
                 help="JPEG renders faster than PNG; WEBP and JPEG support compression.",
             )
         elif is_evolink:
@@ -363,15 +368,6 @@ def render(ctx) -> None:
             )
     with row2[2]:
         if not is_evolink and output_format in ("jpeg", "webp"):
-            compression = st.slider(
-                "Compression",
-                0,
-                100,
-                100,
-                step=5,
-                help="Lower values compress the image harder (smaller files, more artifacts). 100 = best quality.",
-            )
-        elif is_evolink and spec and spec.supports_output_format and output_format in ("jpeg", "webp"):
             compression = st.slider(
                 "Compression",
                 0,

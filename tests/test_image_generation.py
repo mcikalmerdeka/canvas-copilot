@@ -205,6 +205,32 @@ class TestGenerateImagesEvolink:
         assert payload["n"] == 2
         assert payload["output_format"] == "webp"
 
+    def test_seedream_sends_quality_and_png_jpeg_format(self, monkeypatch) -> None:
+        images, details = self._run(
+            monkeypatch, model_id="doubao-seedream-5.5", size="16:9", quality="2K",
+            n=None, output_format="jpeg",
+        )
+        payload = details["create_calls"][0]["args"][1]
+        assert payload["model"] == "doubao-seedream-5.5"
+        assert payload["quality"] == "2K"
+        assert payload["size"] == "16:9"
+        assert payload["output_format"] == "jpeg"
+        assert "n" not in payload
+        assert "resolution" not in payload
+
+    def test_minimax_sends_resolution_and_omits_quality(self, monkeypatch) -> None:
+        images, details = self._run(
+            monkeypatch, model_id="minimax-h3-image", size="16:9", quality=None,
+            resolution="4K", n=4, output_format="webp",
+        )
+        payload = details["create_calls"][0]["args"][1]
+        assert payload["model"] == "minimax-h3-image"
+        assert payload["resolution"] == "4K"
+        assert "quality" not in payload
+        assert payload["size"] == "16:9"
+        assert payload["n"] == 4
+        assert payload["output_format"] == "webp"
+
     def test_grok_sends_its_separate_resolution_param(self, monkeypatch) -> None:
         images, details = self._run(
             monkeypatch, model_id="grok-imagine-image-2.0", size="16:9", quality="low", resolution="2K", n=4,
@@ -325,6 +351,47 @@ class TestGenerateImagesEvolink:
         assert "Reference image uploaded (2/2): two.jpg" in messages
         assert any(msg.startswith("Generation task created") for msg in messages)
         assert any(msg.startswith("Task completed") and "2 image(s)" in msg for msg in messages)
+
+
+class TestEvolinkModelMenus:
+    """The Evolink UI adapts to each model's real parameter shape."""
+
+    APP_PATH = Path(__file__).resolve().parents[1] / "src" / "canvas_copilot" / "app.py"
+
+    def _render_model(self, monkeypatch, model_id: str):
+        from streamlit.testing.v1 import AppTest
+
+        monkeypatch.setenv("EVOLINK_API_KEY", "test-key")
+        monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+        at = AppTest.from_file(str(self.APP_PATH))
+        at.run(timeout=15)
+        at.radio(key="app_provider").set_value(providers.PROVIDER_EVOLINK).run()
+        at.selectbox(key="ig_model_id").set_value(model_id).run()
+        return at
+
+    @staticmethod
+    def _selectbox(at, label: str):
+        return next(box for box in at.selectbox if box.label == label)
+
+    def test_seedream_offers_its_quality_tiers_and_only_png_jpeg(self, monkeypatch) -> None:
+        at = self._render_model(monkeypatch, "doubao-seedream-5.5")
+        assert "Seedream 5.5" in self._selectbox(at, "Model").options
+        assert self._selectbox(at, "Quality").options == [
+            "1K (~1 MP)", "1.5K (~2.25 MP)", "2K (~4 MP)",
+        ]
+        assert all(box.label != "Resolution" for box in at.selectbox)
+        assert self._selectbox(at, "Format").options == ["PNG", "JPEG"]
+        self._selectbox(at, "Format").set_value("jpeg").run()
+        assert all(slider.label != "Compression" for slider in at.slider)
+
+    def test_minimax_uses_resolution_and_has_no_quality_control(self, monkeypatch) -> None:
+        at = self._render_model(monkeypatch, "minimax-h3-image")
+        assert "MiniMax H3 Image" in self._selectbox(at, "Model").options
+        assert all(box.label != "Quality" for box in at.selectbox)
+        assert self._selectbox(at, "Resolution").options == [
+            "1K (~1 MP)", "2K (~4 MP)", "4K (~16.8 MP)",
+        ]
+        assert self._selectbox(at, "Format").options == ["PNG", "JPEG", "WEBP"]
 
 
 class TestOpenAIModelOptions:

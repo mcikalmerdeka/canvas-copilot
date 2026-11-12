@@ -11,10 +11,10 @@ A Streamlit app with two modes and two providers, selectable from the left sideb
 | | OpenAI (official) | Evolink (aggregator) |
 |---|---|---|
 | API key (in `.env`) | `OPENAI_API_KEY` | `EVOLINK_API_KEY` |
-| Image models | `gpt-image-2.6-sunburst` / `gpt-image-2.6-flare` (2.5 still selectable) | GPT Image 2.6 / 2.5 (both variants of each), Nano Banana 2.1, Grok Imagine 2.0, Midjourney v8.2, Qwen Image 3.0 / Pro |
+| Image models | `gpt-image-2.6-sunburst` / `gpt-image-2.6-flare` (2.5 still selectable) | GPT Image 2.6 / 2.5 (both variants of each), Nano Banana 2.1, Grok Imagine 2.0, Midjourney v8.2, Qwen Image 3.0 / Pro, Seedream 5.5, MiniMax H3 Image |
 | Prompt Generation | OpenAI Responses API at `api.openai.com` | OpenAI-compatible Responses API at `direct.evolink.ai` — same models (`gpt-6-luna`), same parameters |
 | Image flow | Sync `/images` endpoints; reference images uploaded as multipart files; base64 responses | Async task API (`/v1/images/generations` → poll `/v1/tasks/{id}` with a live progress bar); reference images uploaded to Evolink's file service and passed as URLs; finished images downloaded from task result URLs (valid 24 h; Midjourney 30 days) |
-| Quality tiers | auto, low … max | Per model: token tiers (GPT Image), resolution tiers 1K–4K (Nano Banana / Qwen), standard/HD (Midjourney); GPT Image 2.6 adds a separate 1K/2K/4K resolution param, Grok a separate 1K/2K one |
+| Quality tiers | auto, low … max | Per model: token tiers (GPT Image), resolution tiers 1K–4K (Nano Banana / Qwen), 1K/1.5K/2K (Seedream), standard/HD (Midjourney); GPT Image 2.6 and MiniMax H3 Image add separate 1K/2K/4K resolution params, Grok a 1K/2K one |
 | Moderation control | yes | not offered by Evolink (control hidden) |
 | Output compression (JPEG/WEBP) | yes | not in Evolink's schema (control hidden) |
 
@@ -24,9 +24,9 @@ Switching providers only requires the matching key in `.env`; the app stops with
 
 ### Image Generation mode
 
-- Text prompt → image. **OpenAI**: `gpt-image-2.6-sunburst` (best detail and editing precision) or `gpt-image-2.6-flare` (faster iteration), with the 2.5 models still selectable. **Evolink**: a model catalog in the Model dropdown — GPT Image 2.6 / 2.5 (both variants of each), **Nano Banana 2.1**, **Grok Imagine 2.0**, **Midjourney v8.2**, and **Qwen Image 3.0 / 3.0 Pro** — with option menus that adapt per model (the registry in `src/canvas_copilot/core/model_registry.py` is transcribed from each model's official API spec).
+- Text prompt → image. **OpenAI**: `gpt-image-2.6-sunburst` (best detail and editing precision) or `gpt-image-2.6-flare` (faster iteration), with the 2.5 models still selectable. **Evolink**: a model catalog in the Model dropdown — GPT Image 2.6 / 2.5 (both variants of each), **Nano Banana 2.1**, **Grok Imagine 2.0**, **Midjourney v8.2**, **Qwen Image 3.0 / 3.0 Pro**, **Seedream 5.5**, and **MiniMax H3 Image** — with option menus that adapt per model (the registry in `src/canvas_copilot/core/model_registry.py` is transcribed from each model's official API spec).
 - Optional **reference images**: attach them and the app switches from the generations endpoint to the edits endpoint (OpenAI), uploads them and passes URLs (most Evolink models), or folds their URLs into the prompt text (Midjourney).
-- Controls for **size/aspect ratio**, **quality** (token tiers for GPT Image / Grok; resolution tiers 1K–4K for Nano Banana and Qwen; standard/HD for Midjourney), **variations**, **output format** and **compression** (OpenAI), **moderation** (OpenAI), a **resolution** tier for GPT Image 2.6 and Grok, a **speed** mode (Fast/Draft) for Midjourney, and a **negative prompt** for Qwen.
+- Controls for **size/aspect ratio**, **quality** (token tiers for GPT Image / Grok; 1K/1.5K/2K for Seedream; resolution tiers 1K–4K for Nano Banana and Qwen; standard/HD for Midjourney; none for MiniMax H3 Image), **variations**, **output format** and **compression** (OpenAI), **moderation** (OpenAI), a **resolution** tier for GPT Image 2.6, MiniMax H3 Image, and Grok, a **speed** mode (Fast/Draft) for Midjourney, and a **negative prompt** for Qwen.
 - Multiple variations render in a tiled grid, each with its own download button.
 - Content-moderation blocks show a targeted hint plus expandable moderation details (stage and categories), per the OpenAI API's `moderation_details` payload.
 
