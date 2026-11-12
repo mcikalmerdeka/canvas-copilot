@@ -1,6 +1,6 @@
-# Prompt Library for gpt-image-2.5-sunburst
+# Prompt Library for GPT Image 2.6 Sunburst
 
-A working library of 60 ready-to-run prompts for the gpt-image-2.5-sunburst model behind this app. The app passes your prompt to the model verbatim, with no rewriting, so what you paste is exactly what the model reads. Size and Quality are set in the app controls, never in the prompt. Every prompt below is self-contained: copy the whole block, paste it into the app, pick the suggested Size and Quality from the note beneath it, and generate.
+A working library of 60 ready-to-run prompts for the gpt-image-2.6-sunburst model behind this app (they also work unchanged with the 2.5 models and Flare). The app passes your prompt to the model verbatim, with no rewriting, so what you paste is exactly what the model reads. Size and Quality are set in the app controls, never in the prompt. Every prompt below is self-contained: copy the whole block, paste it into the app, pick the suggested Size and Quality from the note beneath it, and generate.
 
 ## The Prompt Formula That Works
 

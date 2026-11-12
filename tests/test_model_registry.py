@@ -11,9 +11,11 @@ import canvas_copilot.core.model_registry as mr
 
 
 class TestRegistryCatalog:
-    def test_seven_models_in_the_documented_order(self) -> None:
+    def test_nine_models_in_the_documented_order(self) -> None:
         ids = tuple(spec.model_id for spec in mr.EVOLINK_MODELS.values())
         assert ids == (
+            "gpt-image-2.6-sunburst",
+            "gpt-image-2.6-flare",
             "gpt-image-2.5-sunburst",
             "gpt-image-2.5-flare",
             "gemini-nano-banana-2.1",
@@ -27,6 +29,43 @@ class TestRegistryCatalog:
         labels = [spec.label for spec in mr.EVOLINK_MODELS.values()]
         assert len(set(labels)) == len(labels)
         assert all(label.strip() for label in labels)
+
+
+class TestGptImage26Models:
+    def test_sizes_cover_auto_the_fifteen_ratios_and_pixels(self) -> None:
+        for model_id in ("gpt-image-2.6-sunburst", "gpt-image-2.6-flare"):
+            values = [value for value, _ in mr.EVOLINK_MODELS[model_id].size_options]
+            assert "auto" in values
+            assert {"1:1", "16:9", "21:9", "1:3", "3:1"} <= set(values)
+            assert len([value for value in values if ":" in value]) == 15
+            assert "1024x1024" in values
+
+    def test_quality_tiers_are_the_token_scale_without_auto(self) -> None:
+        for model_id in ("gpt-image-2.6-sunburst", "gpt-image-2.6-flare"):
+            spec = mr.EVOLINK_MODELS[model_id]
+            assert [value for value, _ in spec.quality_options] == [
+                "low", "medium", "high", "xhigh", "max",
+            ]
+            assert spec.quality_default == "medium"
+
+    def test_resolution_is_a_separate_1k_2k_4k_tier(self) -> None:
+        for model_id in ("gpt-image-2.6-sunburst", "gpt-image-2.6-flare"):
+            spec = mr.EVOLINK_MODELS[model_id]
+            assert [value for value, _ in spec.resolution_options] == ["1K", "2K", "4K"]
+            assert spec.resolution_default == "1K"
+
+    def test_format_variations_and_reference_support(self) -> None:
+        for model_id in ("gpt-image-2.6-sunburst", "gpt-image-2.6-flare"):
+            spec = mr.EVOLINK_MODELS[model_id]
+            assert spec.supports_output_format is True
+            assert spec.max_reference_images == 16
+            assert spec.max_variations == 10
+
+    def test_both_variants_have_distinct_human_readable_labels(self) -> None:
+        sunburst = mr.EVOLINK_MODELS["gpt-image-2.6-sunburst"].label
+        flare = mr.EVOLINK_MODELS["gpt-image-2.6-flare"].label
+        assert sunburst != flare
+        assert "2.6" in sunburst and "2.6" in flare
 
 
 class TestGptImageModels:

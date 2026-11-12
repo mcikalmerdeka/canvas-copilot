@@ -192,6 +192,19 @@ class TestGenerateImagesEvolink:
         assert "moderation" not in payload
         assert "output_compression" not in payload
 
+    def test_gpt_image_26_sends_its_model_id_and_resolution_tier(self, monkeypatch) -> None:
+        images, details = self._run(
+            monkeypatch, model_id="gpt-image-2.6-sunburst", size="16:9", quality="max",
+            resolution="4K", n=2, output_format="webp",
+        )
+        payload = details["create_calls"][0]["args"][1]
+        assert payload["model"] == "gpt-image-2.6-sunburst"
+        assert payload["resolution"] == "4K"
+        assert payload["size"] == "16:9"
+        assert payload["quality"] == "max"
+        assert payload["n"] == 2
+        assert payload["output_format"] == "webp"
+
     def test_grok_sends_its_separate_resolution_param(self, monkeypatch) -> None:
         images, details = self._run(
             monkeypatch, model_id="grok-imagine-image-2.0", size="16:9", quality="low", resolution="2K", n=4,
@@ -314,6 +327,21 @@ class TestGenerateImagesEvolink:
         assert any(msg.startswith("Task completed") and "2 image(s)" in msg for msg in messages)
 
 
+class TestOpenAIModelOptions:
+    """The official-API dropdown offers 2.6 first, with 2.5 still selectable."""
+
+    def test_menu_lists_both_families_with_2_6_as_the_default(self) -> None:
+        assert list(ig.MODEL_OPTIONS) == [
+            "gpt-image-2.6-sunburst",
+            "gpt-image-2.6-flare",
+            "gpt-image-2.5-sunburst",
+            "gpt-image-2.5-flare",
+        ]
+        labels = list(ig.MODEL_OPTIONS.values())
+        assert len(set(labels)) == len(labels)
+        assert all(label.strip() for label in labels)
+
+
 class TestOpenAIGenerateFlow:
     """OpenAI end-to-end flow via streamlit.testing — fake client, no network.
 
@@ -369,6 +397,10 @@ class TestOpenAIGenerateFlow:
     def test_generate_payload_carries_the_moderation_value(self, monkeypatch) -> None:
         calls, _ = self._run_generate(monkeypatch)
         assert calls and calls[0]["moderation"] == "auto"
+
+    def test_generate_defaults_to_gpt_image_2_6_sunburst(self, monkeypatch) -> None:
+        calls, _ = self._run_generate(monkeypatch)
+        assert calls and calls[0]["model"] == "gpt-image-2.6-sunburst"
 
     def test_generation_milestones_are_logged(self, monkeypatch, caplog) -> None:
         """Started/finished lines reach the terminal log for the OpenAI flow."""

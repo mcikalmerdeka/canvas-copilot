@@ -5,9 +5,9 @@ Works with both providers selected in the sidebar:
 - **OpenAI** (default): the sync `/images` endpoints (`images.generate` / `images.edit`),
   multipart uploads for reference images, responses come back base64.
 - **Evolink**: the async task API (`evolink_api.py`) with a **model catalog**
-  (`model_registry.py`) — GPT Image 2.5, Nano Banana 2.1, Grok Imagine 2.0,
-  Midjourney v8.2, and Qwen Image 3.0 / Pro. Each model's option menus, limits,
-  and payload shape come from its registry spec.
+  (`model_registry.py`) — GPT Image 2.6 / 2.5, Nano Banana 2.1, Grok Imagine
+  2.0, Midjourney v8.2, and Qwen Image 3.0 / Pro. Each model's option menus,
+  limits, and payload shape come from its registry spec.
 """
 
 from __future__ import annotations
@@ -26,8 +26,10 @@ from canvas_copilot.core import model_registry as mr
 logger = logging.getLogger(__name__)
 
 MODEL_OPTIONS = {
-    "gpt-image-2.5-sunburst": "Sunburst (best editing precision)",
-    "gpt-image-2.5-flare": "Flare (faster, everyday quality)",
+    "gpt-image-2.6-sunburst": "Sunburst 2.6 (best detail & editing)",
+    "gpt-image-2.6-flare": "Flare 2.6 (fast iteration)",
+    "gpt-image-2.5-sunburst": "Sunburst 2.5 (previous generation)",
+    "gpt-image-2.5-flare": "Flare 2.5 (previous generation)",
 }
 SIZE_OPTIONS = {
     "auto": "Auto",
@@ -279,7 +281,7 @@ def render(ctx) -> None:
                 list(MODEL_OPTIONS),
                 format_func=MODEL_OPTIONS.get,
                 index=0,
-                help="Sunburst wins on editing precision. Flare trades precision for faster everyday generation.",
+                help="2.6 is the newest family: Sunburst for detail and editing precision, Flare for faster iteration. 2.5 stays selectable.",
             )
     with columns[1]:
         if size_menu:

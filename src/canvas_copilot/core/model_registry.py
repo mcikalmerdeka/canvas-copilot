@@ -7,7 +7,8 @@ when a model is added or its schema changes:
 
 - every model shares `POST /v1/images/generations` + task polling, but
 - `quality` means resolution tiers (1K/2K/4K) on Nano Banana / Qwen and token
-  tiers (low…max) on GPT Image 2.5, Grok adds a separate `resolution` param,
+  tiers (low…max) on GPT Image 2.6 / 2.5, Grok adds a separate `resolution`
+  param, GPT Image 2.6 also takes a separate 1K/2K/4K `resolution` param,
   Midjourney takes its aspect ratio inside the prompt (`--ar`) and its
   reference images as URLs prepended to the prompt text, and `n` is
   unsupported on Nano Banana and Midjourney.
@@ -66,6 +67,11 @@ _GPT_SIZES: tuple[Option, ...] = _ratio_options(
     ("1:1", "2:1", "1:2", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "9:21")
 ) + _pixel_options()
 
+# GPT Image 2.6's documented ratio set adds the extreme 1:3 / 3:1 pair.
+_GPT_26_SIZES: tuple[Option, ...] = _ratio_options(
+    ("1:1", "1:2", "2:1", "1:3", "3:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9", "9:21")
+) + _pixel_options()
+
 _NANO_SIZES: tuple[Option, ...] = _ratio_options(
     ("1:1", "1:4", "4:1", "1:8", "8:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9")
 )
@@ -85,6 +91,9 @@ _GPT_QUALITY: tuple[Option, ...] = (
     ("xhigh", "X-High"),
     ("max", "Max"),
 )
+_GPT_26_RESOLUTION: tuple[Option, ...] = (
+    ("1K", "1K (~1 MP)"), ("2K", "2K (~4 MP)"), ("4K", "4K (~8.3 MP)"),
+)
 _GROK_QUALITY: tuple[Option, ...] = (("low", "Low"), ("medium", "Medium"))
 _RESOLUTION_TIERS: tuple[Option, ...] = (("1K", "1K (~1 MP)"), ("2K", "2K (~4 MP)"))
 _NANO_QUALITY: tuple[Option, ...] = (
@@ -96,6 +105,30 @@ _MJ_SPEED: tuple[Option, ...] = (("fast", "Fast (4 images)"), ("draft", "Draft (
 
 
 EVOLINK_MODELS: dict[str, EvolinkModel] = {
+    # GPT Image 2.6 (released 2026-11-04): same payload shape as 2.5 plus a
+    # separate 1K/2K/4K resolution tier for ratio sizes. Evolink accepts n up
+    # to 10 but documents n > 1 as unreliable, so the returned count can be
+    # lower than requested.
+    "gpt-image-2.6-sunburst": EvolinkModel(
+        model_id="gpt-image-2.6-sunburst",
+        label="Sunburst 2.6 (best detail & editing)",
+        size_options=_GPT_26_SIZES,
+        quality_options=_GPT_QUALITY,
+        resolution_options=_GPT_26_RESOLUTION,
+        max_variations=10,
+        max_reference_images=16,
+        supports_output_format=True,
+    ),
+    "gpt-image-2.6-flare": EvolinkModel(
+        model_id="gpt-image-2.6-flare",
+        label="Flare 2.6 (fast iteration)",
+        size_options=_GPT_26_SIZES,
+        quality_options=_GPT_QUALITY,
+        resolution_options=_GPT_26_RESOLUTION,
+        max_variations=10,
+        max_reference_images=16,
+        supports_output_format=True,
+    ),
     "gpt-image-2.5-sunburst": EvolinkModel(
         model_id="gpt-image-2.5-sunburst",
         label="Sunburst (best editing precision)",

@@ -1,7 +1,7 @@
 """Evolink (api.evolink.ai) image-series API client for Canvas Copilot.
 
-The gpt-image-2.5 models on Evolink run on an **async task API**, not the
-OpenAI `/images` endpoints:
+The GPT Image 2.6 / 2.5 models on Evolink run on an **async task API**, not
+the OpenAI `/images` endpoints:
 
 1. `POST /v1/images/generations` creates a task and returns its `id`.
 2. `GET /v1/tasks/{id}` is polled until the task is `completed` or `failed`;
