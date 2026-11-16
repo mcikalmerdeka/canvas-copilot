@@ -131,6 +131,19 @@ class TestBuildBrief:
         assert "Keep the framing tight." in brief
         assert "Owner preference: warm light." in brief
 
+    def test_starting_prompt_leads_and_subject_is_optional(self) -> None:
+        brief = pc.build_brief(
+            "",
+            "Person",
+            {"lighting": "Soft window light"},
+            base_prompt="A quiet harbor at dawn, fishing boats on glassy water.",
+        )
+        assert brief.startswith(
+            "STARTING PROMPT\nA quiet harbor at dawn, fishing boats on glassy water."
+        )
+        assert "SUBJECT\n" not in brief
+        assert pc.option_text("lighting", "Soft window light") in brief
+
     def test_group_subject_keeps_character_facets(self) -> None:
         brief = pc.build_brief(
             "Three friends on a rooftop.",

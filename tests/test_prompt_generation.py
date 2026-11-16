@@ -178,6 +178,7 @@ class TestGuidedPipeline:
         assert get_format("format_2")["exemplar_text"] in system_prompt
         assert "hard requirement" in system_prompt.lower()
         assert "every supplied facet" in system_prompt.lower()
+        assert "STARTING PROMPT" in system_prompt
         assert "do not" in system_prompt.lower()
 
     def test_guided_user_content_contains_the_whole_brief(self) -> None:

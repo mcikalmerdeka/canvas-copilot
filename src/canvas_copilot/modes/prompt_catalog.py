@@ -1000,14 +1000,19 @@ def build_brief(
     subject_type: str,
     selections: Mapping[str, str | Sequence[str]],
     notes: str = "",
+    base_prompt: str = "",
 ) -> str:
     """Compose the labeled creative brief sent to the prompt-writing model.
 
     Only populated facets are emitted, so the brief stays proportional to what
-    the user actually chose. The subject and subject type lead, matching how the
-    image models weight prompt order.
+    the user actually chose. A pasted starting prompt leads the brief, matching
+    how the image models weight prompt order; the subject and facets enrich it
+    rather than replace it.
     """
     blocks: list[str] = []
+    base_text = base_prompt.strip()
+    if base_text:
+        blocks.append(f"STARTING PROMPT\n{base_text}")
     subject_text = subject.strip()
     if subject_text:
         blocks.append(f"SUBJECT\n{subject_text}")

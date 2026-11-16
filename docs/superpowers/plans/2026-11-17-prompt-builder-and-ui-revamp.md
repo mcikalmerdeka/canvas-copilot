@@ -107,11 +107,11 @@
 - Consumes: catalog functions, pipeline functions, `ui` helpers.
 - Produces: `render_mode(ctx) -> None`; internal `_builder_values()` and `_apply_preset()` / `_randomize()` / `_reset()` callbacks.
 
-- [ ] Builder UI: capability/format row; preset+randomize+reset; subject card; five expander sections; live brief preview; generate button; validation warning on empty subject.
+- [ ] Builder UI: capability/format row; preset+randomize+reset; starting-prompt card; subject card; persistent section selector (no collapsing expanders); live brief preview; generate button; validation warning when both starting prompt and subject are empty.
 - [ ] Legacy capability forms in cards (Upgrade, Image-to-Prompt, Image-Edit), keeping current fields, help text, and validation.
 - [ ] Result card with Rendered/Raw tabs, JSON fallback, download, Use in Image Generation.
 - [ ] `prompt_generation.render` delegates to `prompt_views.render_mode`.
-- [ ] Smoke tests; manual reasoning over state keys.
+- [ ] Smoke and AppTest tests for section persistence and starting-prompt preservation.
 
 ### Task 5: Image Generation views
 

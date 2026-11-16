@@ -23,12 +23,14 @@ finished prompt to Image Generation exactly as before.
 ## User flow
 
 1. Open Prompt Generation. The default capability is **Prompt Builder**.
-2. Pick a preset or fill the facets: subject type, subject, character, scene, camera, style, finishing.
-3. Watch the compiled brief update live in the right-hand preview card.
-4. Choose an output format (Narrative, Labeled sections, or JSON) and press **Generate Prompt**.
-5. Inspect the result in Rendered / Raw tabs, copy or download it, or press
+2. Optionally paste a starting prompt you already have; the facets enrich it rather than replace it.
+3. Pick a preset or fill the facets: subject type, subject, character, scene, camera, style, finishing.
+4. Switch between facet sections with the persistent section selector; the active section stays open while you choose.
+5. Watch the compiled brief update live in the right-hand preview card.
+6. Choose an output format (Narrative, Labeled sections, or JSON) and press **Generate Prompt**.
+7. Inspect the result in Rendered / Raw tabs, copy or download it, or press
    **Use in Image Generation** to hand the final prompt to the image mode.
-6. Switch to Upgrade Prompt, Image-to-Prompt, or Image-Edit Prompt at any time; builder state survives.
+8. Switch to Upgrade Prompt, Image-to-Prompt, or Image-Edit Prompt at any time; builder state survives.
 
 ## Builder catalog
 
@@ -67,8 +69,8 @@ A `Start fresh` preset clears the builder.
 `build_brief()` emits labeled sections in a fixed order, omitting empty facets:
 
 ```text
-SUBJECT TYPE
-Person
+STARTING PROMPT
+A quiet harbor at dawn, fishing boats resting on glassy water.
 
 SUBJECT
 A woman in her early 30s with a calm, self-assured presence.
@@ -98,7 +100,9 @@ FINISHING TOUCHES
 Avoid: No text or watermarks, No plastic skin
 ```
 
-The brief is an intermediate representation only; it is never shown as the final result.
+The starting prompt block appears only when supplied; the subject block is omitted
+when the starting prompt carries the subject. The brief is an intermediate
+representation only; it is never shown as the final result.
 
 ## Prompt pipeline
 
@@ -106,8 +110,8 @@ The brief is an intermediate representation only; it is never shown as the final
 
 - `CAPABILITY_BUILDER = "Prompt Builder"` and `PIPELINE_GUIDED = "guided"`.
 - `build_guided_system_prompt(format_id)`: the existing exemplar system prompt plus a hard requirement
-  that every supplied facet survives into the finished prompt, that absent facets are filled
-  consistently, and that nothing contradicts the brief.
+  that a supplied starting prompt is preserved, every supplied facet survives into the finished prompt,
+  that absent facets are filled consistently, and that nothing contradicts the brief.
 - `build_user_content(..., guided_brief=...)` returning a plain-text guided user message.
 - `generate_prompt(..., guided_brief=...)` forwarding the brief.
 - The existing `text`, `image`, and `edit` pipelines remain unchanged in signature and behaviour.
@@ -132,9 +136,13 @@ Generation through the existing `image_gen_prompt` + `pending_mode` mechanism.
 ### Prompt Generation
 
 - Capability segmented control and output-format control in a compact row.
-- Builder: two-column split on wide screens. Left = preset row, subject card, and five collapsible
-  facet sections arranged in two-column grids. Right = bordered **Brief preview** card with a
-  copyable `st.code` block, character count, primary Generate button, and Randomize / Reset actions.
+- Builder: two-column split on wide screens. Left = preset row, a starting-prompt card, the
+  subject card, a persistent **Builder section** selector, and the active section's facets in a
+  two-column grid. Right = bordered **Brief preview** card with a copyable `st.code` block,
+  character count, primary Generate button, and Randomize / Reset actions.
+- The section selector is a stateful segmented control instead of expanders, so choosing an option
+  never collapses the section the user is working in. Counts in each section label show selections
+  made elsewhere.
 - Presets and Randomize use widget callbacks that write the `pb_*` session keys before rerun.
 - Upgrade Prompt, Image-to-Prompt, and Image-Edit Prompt keep their current fields and validation,
   rendered inside the new cards and columns.
@@ -187,8 +195,10 @@ Generation through the existing `image_gen_prompt` + `pending_mode` mechanism.
   `pending_handoff_image`), and generation keys (`last_images`, `last_prompt`, `last_format`).
   Smoke tests plus manual flow cover the handoff.
 - **Theme config incompatibility**: keys were verified against Streamlit 1.63's config schema.
-- **Builder becoming a wall of controls**: five collapsed sections, two-column grids, presets, and
-  the live preview keep it scannable; only Subject is always open.
+- **Builder becoming a wall of controls**: the persistent section selector shows one facet group at a
+  time, two-column grids keep each group compact, and the live preview stays visible.
+- **The model replacing a pasted starting prompt**: the guided system prompt makes the starting prompt
+  authoritative, and the brief repeats it as the first block.
 - **LLM omitting facets**: the guided system prompt makes each supplied facet a hard requirement and
   the brief repeats them as labeled sections.
 - **File growth**: UI split into `prompt_views.py` / `image_views.py`; pipeline modules stay focused.

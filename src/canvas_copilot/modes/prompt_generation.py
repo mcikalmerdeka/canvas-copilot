@@ -65,6 +65,7 @@ JSON_OUTPUT_RULE = (
 TEXT_OUTPUT_RULE = "Respond with plain text styled exactly like the exemplar. Do not wrap it in code fences."
 
 GUIDED_REQUIREMENTS = """The user is supplying a structured creative brief. Treat every supplied facet as a hard requirement:
+- If the brief contains a STARTING PROMPT, treat it as the user's authoritative draft: preserve its subject, intent, and specific details, then enrich it with the supplied facets. Do not replace or contradict it.
 - Reflect every supplied facet explicitly in the finished prompt. Do not drop, merge away, or contradict any selection.
 - Expand only in ways consistent with the brief; do not invent a different subject, setting, wardrobe, camera, or mood.
 - When a facet is absent, choose details that fit the rest of the brief rather than inventing a conflicting direction.

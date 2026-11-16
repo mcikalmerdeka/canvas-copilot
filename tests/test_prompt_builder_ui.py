@@ -44,9 +44,10 @@ def test_builder_is_the_default_capability(monkeypatch) -> None:
     assert not at.exception
     assert at.segmented_control(key="pg_capability").value == "Prompt Builder"
     assert at.text_area(key="pb_subject").value == ""
+    assert at.text_area(key="pb_base_prompt").value == ""
     assert at.selectbox(key="pb_preset").value == "fresh"
-    assert any(expander.label.startswith("Character") for expander in at.expander)
-    assert "Choose a subject" in at.code[0].value
+    assert at.segmented_control(key="pb_section").value == "character"
+    assert "Paste a starting prompt" in at.code[0].value
 
 
 def test_preset_fills_subject_facets_and_brief(monkeypatch) -> None:
@@ -105,7 +106,36 @@ def test_surprise_me_fills_facets_but_preserves_free_text(monkeypatch) -> None:
     assert not at.exception
     assert at.text_area(key="pb_character_details").value == "Glasses and freckles."
     assert at.selectbox(key="pb_character_outfit").value != catalog.DEFAULT_LABEL
+    at.segmented_control(key="pb_section").set_value("scene").run(timeout=20)
     assert at.selectbox(key="pb_setting").value != catalog.DEFAULT_LABEL
+
+
+def test_selecting_a_facet_keeps_its_section_open(monkeypatch) -> None:
+    at, _ = _open_builder(monkeypatch)
+    at.segmented_control(key="pb_section").set_value("camera").run(timeout=20)
+    at.selectbox(key="pb_lens").set_value("85mm portrait").run(timeout=20)
+
+    assert not at.exception
+    assert at.segmented_control(key="pb_section").value == "camera"
+    assert at.selectbox(key="pb_lens").value == "85mm portrait"
+
+
+def test_starting_prompt_is_preserved_and_allows_generation(monkeypatch) -> None:
+    at, calls = _open_builder(monkeypatch)
+    at.text_area(key="pb_base_prompt").set_value(
+        "A quiet harbor at dawn, fishing boats resting on glassy water."
+    ).run(timeout=20)
+    at.segmented_control(key="pb_section").set_value("camera").run(timeout=20)
+    at.selectbox(key="pb_lens").set_value("85mm portrait").run(timeout=20)
+    _button(at, "Generate Prompt").click().run(timeout=20)
+
+    assert not at.exception
+    assert calls
+    brief = calls[0]["guided_brief"]
+    assert brief.startswith("STARTING PROMPT\nA quiet harbor at dawn")
+    assert "85mm portrait lens" in brief
+    assert "SUBJECT\n" not in brief
+    assert at.session_state["pg_result"] == "FAKE PROMPT OUTPUT"
 
 
 def test_switching_format_after_generation_keeps_the_original_rendering(monkeypatch) -> None:

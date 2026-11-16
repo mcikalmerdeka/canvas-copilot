@@ -106,9 +106,11 @@ def _randomize() -> None:
 
 def _reset_builder() -> None:
     _reset_facet_state()
+    st.session_state["pb_base_prompt"] = ""
     st.session_state["pb_subject"] = ""
     st.session_state["pb_subject_type"] = "Person"
     st.session_state["pb_preset"] = "fresh"
+    st.session_state["pb_section"] = "character"
 
 
 def _selected_count(facets: tuple[catalog.Facet, ...]) -> int:
@@ -175,15 +177,13 @@ GROUP_HELP = {
 }
 
 
-def _render_group(group_id: str, label: str, subject_type: str) -> None:
+def _render_section(group_id: str, subject_type: str) -> None:
     facets = tuple(
         facet for facet in catalog.facets_for(subject_type) if facet.group == group_id
     )
     if not facets:
         return
-    count = _selected_count(facets)
-    expander_label = f"{label} · {count} selected" if count else label
-    with st.expander(expander_label, expanded=False):
+    with st.container(border=True):
         if GROUP_HELP.get(group_id):
             st.caption(GROUP_HELP[group_id])
         columns = st.columns(2, gap="medium")
@@ -196,8 +196,26 @@ def _render_group(group_id: str, label: str, subject_type: str) -> None:
                 _render_facet(facet)
 
 
-def _render_builder(fmt_id: str) -> tuple[str, str, str, bool]:
-    """Render the builder; return (subject, subject_type, brief, submitted)."""
+def _available_sections(subject_type: str) -> list[tuple[str, str]]:
+    sections: list[tuple[str, str]] = []
+    for group_id, label in catalog.GROUPS:
+        if group_id == "subject":
+            continue
+        if any(facet.group == group_id for facet in catalog.facets_for(subject_type)):
+            sections.append((group_id, label))
+    return sections
+
+
+def _section_label(group_id: str, label: str, subject_type: str) -> str:
+    facets = tuple(
+        facet for facet in catalog.facets_for(subject_type) if facet.group == group_id
+    )
+    count = _selected_count(facets)
+    return f"{label} · {count}" if count else label
+
+
+def _render_builder(fmt_id: str) -> tuple[str, str, str, str, bool]:
+    """Render the builder; return (base, subject, subject_type, brief, submitted)."""
     left, right = st.columns([1.15, 0.85], gap="large")
 
     with left:
@@ -227,7 +245,23 @@ def _render_builder(fmt_id: str) -> tuple[str, str, str, bool]:
             )
 
         with st.container(border=True):
-            ui.section("Subject", "Who or what is the image about?")
+            ui.section(
+                "Starting prompt",
+                "Optional. Paste a prompt you already have — the facets below enrich it instead of replacing it.",
+            )
+            base_prompt = st.text_area(
+                "Starting prompt",
+                key="pb_base_prompt",
+                height=132,
+                placeholder="A quiet harbor at dawn, fishing boats resting on glassy water…",
+                help="When present, the model preserves this draft's intent and details and layers the selected facets on top.",
+            )
+
+        with st.container(border=True):
+            ui.section(
+                "Subject",
+                "Who or what is the image about? Optional when a starting prompt is present.",
+            )
             st.session_state.setdefault("pb_subject_type", "Person")
             subject_type = st.segmented_control(
                 "Subject type",
@@ -248,17 +282,37 @@ def _render_builder(fmt_id: str) -> tuple[str, str, str, bool]:
                 help="A sentence or two. Concrete nouns beat adjectives.",
             )
 
-        for group_id, label in catalog.GROUPS:
-            if group_id == "subject":
-                continue
-            _render_group(group_id, label, subject_type)
+        sections = _available_sections(subject_type)
+        if sections:
+            section_ids = [section_id for section_id, _ in sections]
+            if st.session_state.get("pb_section") not in section_ids:
+                st.session_state["pb_section"] = section_ids[0]
+            section_labels = {
+                section_id: _section_label(section_id, label, subject_type)
+                for section_id, label in sections
+            }
+            section = st.segmented_control(
+                "Builder section",
+                section_ids,
+                format_func=lambda section_id: section_labels[section_id],
+                key="pb_section",
+                required=True,
+            )
+            section = section or section_ids[0]
+            st.caption("Selections in other sections are kept.")
+            _render_section(section, subject_type)
 
     selections = _current_selections(subject_type)
-    brief = catalog.build_brief(subject, subject_type, selections)
+    brief = catalog.build_brief(
+        subject,
+        subject_type,
+        selections,
+        base_prompt=base_prompt,
+    )
     preview_text = (
         brief
-        if subject.strip()
-        else "# Choose a subject and a few facets to see the brief."
+        if subject.strip() or base_prompt.strip()
+        else "# Paste a starting prompt or choose a subject to see the brief."
     )
 
     submitted = False
@@ -282,7 +336,7 @@ def _render_builder(fmt_id: str) -> tuple[str, str, str, bool]:
                 width="stretch",
             )
 
-    return subject, subject_type, brief, submitted
+    return base_prompt, subject, subject_type, brief, submitted
 
 
 # ---------------------------------------------------------------------------
@@ -332,21 +386,20 @@ def _render_image_to_prompt(fmt: dict[str, object]) -> bool:
             )
             if image_file:
                 st.image(image_file, caption=image_file.name, width="stretch")
-    with right:
-        with st.container(border=True):
-            ui.section("Direction", f"Format · {fmt['label']}")
-            st.text_input(
-                "Extra direction (optional)",
-                key="pg_extra_direction",
-                placeholder="e.g. focus on the lighting",
-                help="Steer the model toward what matters most about this image.",
-            )
-            return st.button(
-                "Generate Prompt",
-                type="primary",
-                icon=":material/image_search:",
-                width="stretch",
-            )
+    with right, st.container(border=True):
+        ui.section("Direction", f"Format · {fmt['label']}")
+        st.text_input(
+            "Extra direction (optional)",
+            key="pg_extra_direction",
+            placeholder="e.g. focus on the lighting",
+            help="Steer the model toward what matters most about this image.",
+        )
+        return st.button(
+            "Generate Prompt",
+            type="primary",
+            icon=":material/image_search:",
+            width="stretch",
+        )
     return False
 
 
@@ -604,15 +657,18 @@ def render_mode(ctx: pr.ProviderContext) -> None:
             st.caption(FORMAT_CAPTION.get(capability, ""))
 
     if capability == pg.CAPABILITY_BUILDER:
-        subject, subject_type, brief, submitted = _render_builder(fmt_id)
+        base_prompt, subject, subject_type, brief, submitted = _render_builder(fmt_id)
         if submitted:
-            if not subject.strip():
-                st.warning("Please describe the subject before generating a prompt.")
+            if not (subject.strip() or base_prompt.strip()):
+                st.warning(
+                    "Paste a starting prompt or describe the subject before generating a prompt."
+                )
             else:
                 logger.info(
-                    "Guided prompt generation started (subject_type=%s, facets=%d)",
+                    "Guided prompt generation started (subject_type=%s, facets=%d, starting_prompt=%s)",
                     subject_type,
                     _selected_count(catalog.facets_for(subject_type)),
+                    bool(base_prompt.strip()),
                 )
                 _handle_generate(
                     ctx,
