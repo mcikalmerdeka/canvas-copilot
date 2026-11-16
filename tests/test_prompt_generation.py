@@ -11,6 +11,8 @@ import json
 import logging
 from types import SimpleNamespace
 
+import pytest
+
 import canvas_copilot.modes.prompt_generation as pg
 from canvas_copilot.modes.prompt_formats import get_format
 
@@ -162,6 +164,51 @@ class TestEditPipeline:
         client = RecordingClient()
         pg.generate_prompt(client, pg.PIPELINE_TEXT, "format_2", raw_prompt="idea")
         assert get_format("format_2")["exemplar_text"] in client.responses.calls[0]["input"][0]["content"]
+
+
+class TestGuidedPipeline:
+    """The guided builder sends a structured brief through the same format exemplars."""
+
+    def test_builder_capability_constant(self) -> None:
+        assert pg.CAPABILITY_BUILDER == "Prompt Builder"
+        assert pg.PIPELINE_GUIDED == "guided"
+
+    def test_guided_system_prompt_contains_exemplar_and_hard_requirement(self) -> None:
+        system_prompt = pg.build_guided_system_prompt("format_2")
+        assert get_format("format_2")["exemplar_text"] in system_prompt
+        assert "hard requirement" in system_prompt.lower()
+        assert "every supplied facet" in system_prompt.lower()
+        assert "do not" in system_prompt.lower()
+
+    def test_guided_user_content_contains_the_whole_brief(self) -> None:
+        brief = "SUBJECT\nA woman in her 30s.\n\nSCENE\nSetting: A photo studio"
+        content = pg.build_user_content(pg.PIPELINE_GUIDED, guided_brief=brief)
+        assert isinstance(content, str)
+        assert brief in content
+        assert "exemplar" in content.lower()
+
+    def test_guided_generation_uses_guided_prompt_and_user_brief(self) -> None:
+        brief = "SUBJECT\nA ceramic cup on a plinth."
+        client = RecordingClient()
+        pg.generate_prompt(client, pg.PIPELINE_GUIDED, "format_2", guided_brief=brief)
+        messages = client.responses.calls[0]["input"]
+        assert messages[0]["content"] == pg.build_guided_system_prompt("format_2")
+        assert messages[1]["role"] == "user"
+        assert brief in messages[1]["content"]
+
+    def test_guided_generation_needs_no_raw_prompt_or_image(self) -> None:
+        client = RecordingClient()
+        result = pg.generate_prompt(
+            client, pg.PIPELINE_GUIDED, "format_1", guided_brief="SUBJECT\nA lone chapel."
+        )
+        assert result == "SAMPLE PROMPT OUTPUT"
+        assert "input_image" not in str(client.responses.calls[0]["input"])
+
+    def test_empty_brief_is_rejected_before_the_call(self) -> None:
+        client = RecordingClient()
+        with pytest.raises(ValueError, match="brief"):
+            pg.generate_prompt(client, pg.PIPELINE_GUIDED, "format_1", guided_brief="   ")
+        assert client.responses.calls == []
 
 
 class TestOutputHandling:
