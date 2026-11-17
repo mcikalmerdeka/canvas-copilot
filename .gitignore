@@ -17,6 +17,9 @@ experiment/
 prompts/
 example/
 
+# Deferred design notes (kept locally, not part of the repo)
+docs/superpowers/specs/2026-11-17-flat-package-root-entry-design.md
+
 # AXIOM
 .agents/
 .env.axiom
